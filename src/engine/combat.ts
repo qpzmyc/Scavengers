@@ -1,6 +1,6 @@
 import { GameState, PlayerId, Position } from './types';
 import { isInBounds, isWall } from './board';
-import { ATTACK_ENERGY_COST, SHOOT_AMMO_COST } from './constants';
+import { ATTACK_ENERGY_COST, SHOOT_AMMO_COST, BOMB_AMMO_COST } from './constants';
 import { clearPhantom } from './phantom';
 
 function otherPlayerId(playerId: PlayerId): PlayerId {
@@ -80,4 +80,45 @@ export function shoot(state: GameState, attackerId: PlayerId, direction: Positio
     return { state: next, killedPlayerIds: [] };
   }
   return killIfPresent(next, target.position);
+}
+
+function isOnStraightLine(from: Position, to: Position): boolean {
+  const dx = to.x - from.x;
+  const dy = to.y - from.y;
+  if (dx === 0 && dy === 0) return false;
+  if (dx === 0 || dy === 0) return true;
+  return Math.abs(dx) === Math.abs(dy);
+}
+
+export function bomb(state: GameState, attackerId: PlayerId, targetPos: Position): { state: GameState; killedPlayerIds: PlayerId[] } {
+  const attacker = state.players[attackerId];
+  if (attacker.ammo < BOMB_AMMO_COST) {
+    throw new Error('Not enough ammo to bomb');
+  }
+  if (!isOnStraightLine(attacker.position, targetPos)) {
+    throw new Error('Bomb target must be on a straight line (incl. diagonal) from the attacker');
+  }
+
+  let next = clearPhantom(state, attackerId);
+  next = spendAttackEnergy(next, attackerId);
+  next = {
+    ...next,
+    players: {
+      ...next.players,
+      [attackerId]: { ...next.players[attackerId], ammo: next.players[attackerId].ammo - BOMB_AMMO_COST },
+    },
+  };
+
+  const killed: PlayerId[] = [];
+  let players = next.players;
+  (['p1', 'p2'] as PlayerId[]).forEach((id) => {
+    const p = players[id];
+    const inBlast = Math.abs(p.position.x - targetPos.x) <= 1 && Math.abs(p.position.y - targetPos.y) <= 1;
+    if (inBlast && p.alive && p.immuneTurns === 0) {
+      players = { ...players, [id]: { ...p, alive: false } };
+      killed.push(id);
+    }
+  });
+
+  return { state: { ...next, players }, killedPlayerIds: killed };
 }

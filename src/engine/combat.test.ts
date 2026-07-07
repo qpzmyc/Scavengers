@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { createInitialGameState } from './state';
-import { punch, shoot, traceLine } from './combat';
-import { ATTACK_ENERGY_COST, SHOOT_AMMO_COST, START_AMMO, START_ENERGY } from './constants';
+import { punch, shoot, traceLine, bomb } from './combat';
+import { ATTACK_ENERGY_COST, SHOOT_AMMO_COST, START_AMMO, START_ENERGY, BOMB_AMMO_COST } from './constants';
 
 function withPositions(state: ReturnType<typeof createInitialGameState>, p1: { x: number; y: number }, p2: { x: number; y: number }) {
   return {
@@ -85,5 +85,45 @@ describe('shoot', () => {
     let state = createInitialGameState('lastStanding');
     state = { ...state, players: { ...state.players, p1: { ...state.players.p1, ammo: 0 } } };
     expect(() => shoot(state, 'p1', { x: 1, y: 0 })).toThrow();
+  });
+});
+
+describe('bomb', () => {
+  it('kills a player within the 3x3 blast centered on the target tile', () => {
+    let state = createInitialGameState('lastStanding');
+    state = withPositions(state, { x: 0, y: 0 }, { x: 4, y: 0 });
+    state = { ...state, players: { ...state.players, p1: { ...state.players.p1, ammo: BOMB_AMMO_COST } } };
+    // p1 at (0,0), targets (5,0) which is in line along x-axis; blast covers x in [4,6], y in [-1,1] -> includes (4,0).
+    const result = bomb(state, 'p1', { x: 5, y: 0 });
+    expect(result.killedPlayerIds).toEqual(['p2']);
+  });
+
+  it('is not blocked by a wall between attacker and target', () => {
+    let state = createInitialGameState('lastStanding');
+    // p1 at (5,3) below the top wall pair; target (5,0) is past the wall along the same line.
+    state = withPositions(state, { x: 5, y: 3 }, { x: 5, y: 0 });
+    state = { ...state, players: { ...state.players, p1: { ...state.players.p1, ammo: BOMB_AMMO_COST } } };
+    const result = bomb(state, 'p1', { x: 5, y: 0 });
+    expect(result.killedPlayerIds).toEqual(['p2']);
+  });
+
+  it('throws if the target is not on a straight line from the attacker', () => {
+    let state = createInitialGameState('lastStanding');
+    state = { ...state, players: { ...state.players, p1: { ...state.players.p1, position: { x: 0, y: 0 }, ammo: BOMB_AMMO_COST } } };
+    expect(() => bomb(state, 'p1', { x: 3, y: 7 })).toThrow();
+  });
+
+  it('throws if attacker has less than 3 ammo', () => {
+    let state = createInitialGameState('lastStanding');
+    state = { ...state, players: { ...state.players, p1: { ...state.players.p1, ammo: 1 } } };
+    expect(() => bomb(state, 'p1', { x: 5, y: 0 })).toThrow();
+  });
+
+  it('deducts exactly BOMB_AMMO_COST ammo', () => {
+    let state = createInitialGameState('lastStanding');
+    state = withPositions(state, { x: 0, y: 0 }, { x: 4, y: 0 });
+    state = { ...state, players: { ...state.players, p1: { ...state.players.p1, ammo: BOMB_AMMO_COST } } };
+    const result = bomb(state, 'p1', { x: 5, y: 0 });
+    expect(result.state.players.p1.ammo).toBe(0);
   });
 });
