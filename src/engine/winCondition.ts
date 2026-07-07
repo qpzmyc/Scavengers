@@ -1,4 +1,4 @@
-import { GameState, PlayerId } from './types';
+import type { GameState, PlayerId } from './types';
 
 export function checkWinCondition(state: GameState): PlayerId | null {
   const ids: PlayerId[] = ['p1', 'p2'];

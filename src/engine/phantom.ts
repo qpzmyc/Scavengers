@@ -1,4 +1,4 @@
-import { GameState, PlayerId, Position } from './types';
+import type { GameState, PlayerId, Position } from './types';
 import { isInBounds } from './board';
 
 export function fakeMove(state: GameState, playerId: PlayerId, direction: Position): GameState {

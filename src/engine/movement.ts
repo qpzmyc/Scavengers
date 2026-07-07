@@ -1,4 +1,4 @@
-import { GameState, PlayerId, Position } from './types';
+import type { GameState, PlayerId, Position } from './types';
 import { isInBounds, isWall, getTile } from './board';
 import { MAX_MOVE_TILES, MOVE_ENERGY_COST_PER_TILE, REST_ENERGY_GAIN, ENERGY_PICKUP_VALUE, MAX_ENERGY, MAX_AMMO } from './constants';
 

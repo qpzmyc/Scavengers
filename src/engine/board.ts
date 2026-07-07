@@ -1,4 +1,4 @@
-import { Tile, Position } from './types';
+import type { Tile, Position } from './types';
 import { GRID_SIZE } from './constants';
 
 export function buildBoard(): Tile[][] {

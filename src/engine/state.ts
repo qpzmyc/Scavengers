@@ -1,4 +1,4 @@
-import { GameState, GameMode, PlayerState, PlayerId } from './types';
+import type { GameState, GameMode, PlayerState, PlayerId } from './types';
 import { buildBoard } from './board';
 import {
   START_ENERGY,

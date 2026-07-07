@@ -1,4 +1,4 @@
-import { GameState, PlayerId } from './types';
+import type { GameState, PlayerId } from './types';
 import { KILL_SCORE, DEATH_SCORE, STREAK_SCORE_PER_TURN } from './constants';
 
 export function applyKillScoring(state: GameState, killerId: PlayerId, victimId: PlayerId): GameState {

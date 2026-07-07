@@ -1,4 +1,4 @@
-import { GameState, PlayerId } from './types';
+import type { GameState, PlayerId } from './types';
 import { RESPAWN_IMMUNITY_TURNS } from './constants';
 
 export function respawnPlayer(state: GameState, playerId: PlayerId): GameState {

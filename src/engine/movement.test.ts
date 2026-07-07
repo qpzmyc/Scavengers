@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { createInitialGameState } from './state';
 import { movePlayer, restPlayer } from './movement';
-import { MAX_ENERGY, START_ENERGY, REST_ENERGY_GAIN, ENERGY_PICKUP_VALUE } from './constants';
+import { MAX_ENERGY, START_ENERGY } from './constants';
 
 describe('movePlayer', () => {
   it('moves one tile and deducts 1 energy', () => {

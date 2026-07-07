@@ -1,4 +1,4 @@
-import { PlayerId } from './types';
+import type { PlayerId } from './types';
 
 export const GRID_SIZE = 11;
 

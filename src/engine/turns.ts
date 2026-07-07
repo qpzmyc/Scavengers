@@ -1,4 +1,4 @@
-import { GameState, PlayerId } from './types';
+import type { GameState, PlayerId } from './types';
 import { respawnPlayer, tickImmunity } from './respawn';
 import { applyKillScoring, incrementStreakScore } from './scoring';
 import { checkWinCondition } from './winCondition';

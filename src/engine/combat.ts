@@ -1,4 +1,4 @@
-import { GameState, PlayerId, Position } from './types';
+import type { GameState, PlayerId, Position } from './types';
 import { isInBounds, isWall } from './board';
 import { ATTACK_ENERGY_COST, SHOOT_AMMO_COST, BOMB_AMMO_COST } from './constants';
 import { clearPhantom } from './phantom';
