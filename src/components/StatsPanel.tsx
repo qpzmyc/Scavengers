@@ -17,7 +17,7 @@ export function StatsPanel({ state }: StatsPanelProps) {
           <div>Kills: {p.kills}</div>
           <div>Deaths: {p.deaths}</div>
           {state.mode === 'deathmatch' && <div>Score: {p.score}</div>}
-          <div>Longest streak: {p.longestStreak}</div>
+          <div>Longest streak: {Math.max(p.longestStreak, p.currentStreak)}</div>
         </div>
       ))}
       <div>

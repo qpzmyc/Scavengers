@@ -45,6 +45,13 @@ describe('punch', () => {
     const result = punch(state, 'p1', { x: 5, y: 7 });
     expect(result.killedPlayerIds).toEqual([]);
   });
+
+  it('throws if attacker has no energy', () => {
+    let state = createInitialGameState('lastStanding');
+    state = withPositions(state, { x: 5, y: 6 }, { x: 5, y: 7 });
+    state = { ...state, players: { ...state.players, p1: { ...state.players.p1, energy: 0 } } };
+    expect(() => punch(state, 'p1', { x: 5, y: 7 })).toThrow();
+  });
 });
 
 describe('traceLine', () => {
@@ -86,6 +93,12 @@ describe('shoot', () => {
     state = { ...state, players: { ...state.players, p1: { ...state.players.p1, ammo: 0 } } };
     expect(() => shoot(state, 'p1', { x: 1, y: 0 })).toThrow();
   });
+
+  it('throws if attacker has no energy', () => {
+    let state = createInitialGameState('lastStanding');
+    state = { ...state, players: { ...state.players, p1: { ...state.players.p1, ammo: 1, energy: 0 } } };
+    expect(() => shoot(state, 'p1', { x: 1, y: 0 })).toThrow();
+  });
 });
 
 describe('bomb', () => {
@@ -125,5 +138,12 @@ describe('bomb', () => {
     state = { ...state, players: { ...state.players, p1: { ...state.players.p1, ammo: BOMB_AMMO_COST } } };
     const result = bomb(state, 'p1', { x: 5, y: 0 });
     expect(result.state.players.p1.ammo).toBe(0);
+  });
+
+  it('throws if attacker has no energy', () => {
+    let state = createInitialGameState('lastStanding');
+    state = withPositions(state, { x: 0, y: 0 }, { x: 4, y: 0 });
+    state = { ...state, players: { ...state.players, p1: { ...state.players.p1, ammo: BOMB_AMMO_COST, energy: 0 } } };
+    expect(() => bomb(state, 'p1', { x: 5, y: 0 })).toThrow();
   });
 });

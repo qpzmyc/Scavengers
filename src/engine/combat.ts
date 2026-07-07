@@ -38,6 +38,9 @@ export function punch(state: GameState, attackerId: PlayerId, targetPos: Positio
   if (dx > 1 || dy > 1 || (dx === 0 && dy === 0)) {
     throw new Error('Punch target must be adjacent (including diagonal)');
   }
+  if (attacker.energy < ATTACK_ENERGY_COST) {
+    throw new Error('Not enough energy to attack');
+  }
 
   let next = clearPhantom(state, attackerId);
   next = spendAttackEnergy(next, attackerId);
@@ -59,6 +62,9 @@ export function shoot(state: GameState, attackerId: PlayerId, direction: Positio
   const attacker = state.players[attackerId];
   if (attacker.ammo < SHOOT_AMMO_COST) {
     throw new Error('Not enough ammo to shoot');
+  }
+  if (attacker.energy < ATTACK_ENERGY_COST) {
+    throw new Error('Not enough energy to attack');
   }
 
   let next = clearPhantom(state, attackerId);
@@ -97,6 +103,9 @@ export function bomb(state: GameState, attackerId: PlayerId, targetPos: Position
   }
   if (!isOnStraightLine(attacker.position, targetPos)) {
     throw new Error('Bomb target must be on a straight line (incl. diagonal) from the attacker');
+  }
+  if (attacker.energy < ATTACK_ENERGY_COST) {
+    throw new Error('Not enough energy to attack');
   }
 
   let next = clearPhantom(state, attackerId);
