@@ -26,18 +26,38 @@ describe('buildBoard', () => {
     expect(getTile(board, { x: 10, y: 5 }).type).toBe('wall');
   });
 
-  it('places energy pickups on the outer ring of the center 5x5', () => {
+  it('places energy pickups at the four corners of the central 5x5', () => {
     const board = buildBoard();
     expect(getTile(board, { x: 3, y: 3 }).type).toBe('energyPickup');
+    expect(getTile(board, { x: 7, y: 3 }).type).toBe('energyPickup');
+    expect(getTile(board, { x: 3, y: 7 }).type).toBe('energyPickup');
     expect(getTile(board, { x: 7, y: 7 }).type).toBe('energyPickup');
-    expect(getTile(board, { x: 5, y: 3 }).type).toBe('energyPickup');
   });
 
-  it('places ammo pickups on the middle ring (border of inner 3x3)', () => {
+  it('places exactly 4 energy pickups and 3 ammo pickups on the board', () => {
     const board = buildBoard();
-    expect(getTile(board, { x: 4, y: 4 }).type).toBe('ammoPickup');
-    expect(getTile(board, { x: 6, y: 6 }).type).toBe('ammoPickup');
-    expect(getTile(board, { x: 5, y: 4 }).type).toBe('ammoPickup');
+    let energyCount = 0;
+    let ammoCount = 0;
+    let ammoInCentral = 0;
+    for (let y = 0; y < board.length; y++) {
+      for (let x = 0; x < board[y].length; x++) {
+        const type = board[y][x].type;
+        if (type === 'energyPickup') energyCount++;
+        if (type === 'ammoPickup') {
+          ammoCount++;
+          const inCentral = x >= 4 && x <= 6 && y >= 4 && y <= 6 && !(x === 5 && y === 5);
+          if (inCentral) ammoInCentral++;
+        }
+      }
+    }
+    expect(energyCount).toBe(4);
+    expect(ammoCount).toBe(3);
+    expect(ammoInCentral).toBe(3);
+  });
+
+  it('never places an ammo pickup on the center wall cell', () => {
+    const board = buildBoard();
+    expect(getTile(board, { x: 5, y: 5 }).type).toBe('wall');
   });
 
   it('leaves most tiles empty', () => {

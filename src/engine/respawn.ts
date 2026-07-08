@@ -1,5 +1,5 @@
 import type { GameState, PlayerId } from './types';
-import { RESPAWN_IMMUNITY_TURNS } from './constants';
+import { RESPAWN_IMMUNITY_TURNS, START_ENERGY, START_AMMO } from './constants';
 
 export function respawnPlayer(state: GameState, playerId: PlayerId): GameState {
   const player = state.players[playerId];
@@ -18,6 +18,8 @@ export function respawnPlayer(state: GameState, playerId: PlayerId): GameState {
         position,
         immuneTurns: RESPAWN_IMMUNITY_TURNS,
         currentStreak: 0,
+        energy: START_ENERGY,
+        ammo: START_AMMO,
       },
     },
   };

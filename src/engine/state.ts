@@ -1,4 +1,4 @@
-import type { GameState, GameMode, PlayerState, PlayerId } from './types';
+import type { GameState, GameMode, PlayerState, PlayerId, PlayerColor } from './types';
 import { buildBoard } from './board';
 import {
   START_ENERGY,
@@ -8,7 +8,15 @@ import {
   DEFAULT_TARGET_SCORE,
 } from './constants';
 
-function createPlayer(id: PlayerId, color: PlayerState['color']): PlayerState {
+const ALL_PLAYER_IDS: PlayerId[] = ['p1', 'p2', 'p3', 'p4'];
+const PLAYER_COLORS: Record<PlayerId, PlayerColor> = {
+  p1: 'green',
+  p2: 'red',
+  p3: 'blue',
+  p4: 'yellow',
+};
+
+function createPlayer(id: PlayerId, color: PlayerState['color'], eliminated: boolean): PlayerState {
   const cornerZone = CORNER_ZONES[id];
   return {
     id,
@@ -16,7 +24,7 @@ function createPlayer(id: PlayerId, color: PlayerState['color']): PlayerState {
     position: { x: cornerZone.x0, y: cornerZone.y0 },
     energy: START_ENERGY,
     ammo: START_AMMO,
-    alive: true,
+    alive: !eliminated,
     isPhantom: false,
     phantomDisplayPosition: null,
     immuneTurns: 0,
@@ -26,20 +34,28 @@ function createPlayer(id: PlayerId, color: PlayerState['color']): PlayerState {
     longestStreak: 0,
     score: 0,
     cornerZone,
+    eliminated,
   };
 }
 
-export function createInitialGameState(mode: GameMode): GameState {
+export function createInitialGameState(mode: GameMode, playerCount: number = 2): GameState {
+  const turnOrder = ALL_PLAYER_IDS.slice(0, playerCount);
+
+  const players = {} as Record<PlayerId, PlayerState>;
+  for (const id of ALL_PLAYER_IDS) {
+    const inPlay = turnOrder.includes(id);
+    players[id] = createPlayer(id, PLAYER_COLORS[id], !inPlay);
+  }
+
   return {
     board: buildBoard(),
-    players: {
-      p1: createPlayer('p1', 'green'),
-      p2: createPlayer('p2', 'red'),
-    },
+    players,
+    turnOrder,
     currentTurn: 'p1',
     mode,
     winner: null,
     deathCap: DEFAULT_DEATH_CAP,
     targetScore: DEFAULT_TARGET_SCORE,
+    pendingPickups: [],
   };
 }

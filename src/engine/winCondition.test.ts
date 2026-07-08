@@ -8,10 +8,16 @@ describe('checkWinCondition - lastStanding', () => {
     expect(checkWinCondition(state)).toBeNull();
   });
 
-  it('returns the opponent id when a player hits the death cap', () => {
+  it('returns the last remaining player id when all others are eliminated', () => {
+    let state = createInitialGameState('lastStanding');
+    state = { ...state, players: { ...state.players, p2: { ...state.players.p2, deaths: state.deathCap, eliminated: true, alive: false } } };
+    expect(checkWinCondition(state)).toBe('p1');
+  });
+
+  it('returns null when a player hits the death cap but has not yet been eliminated', () => {
     let state = createInitialGameState('lastStanding');
     state = { ...state, players: { ...state.players, p2: { ...state.players.p2, deaths: state.deathCap } } };
-    expect(checkWinCondition(state)).toBe('p1');
+    expect(checkWinCondition(state)).toBeNull();
   });
 });
 

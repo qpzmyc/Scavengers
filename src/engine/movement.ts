@@ -1,6 +1,6 @@
 import type { GameState, PlayerId, Position } from './types';
 import { isInBounds, isWall, getTile } from './board';
-import { MAX_MOVE_TILES, MOVE_ENERGY_COST_PER_TILE, REST_ENERGY_GAIN, ENERGY_PICKUP_VALUE, MAX_ENERGY, MAX_AMMO } from './constants';
+import { MAX_MOVE_TILES, MOVE_ENERGY_COST_PER_TILE, REST_ENERGY_GAIN, ENERGY_PICKUP_VALUE, MAX_ENERGY, MAX_AMMO, GRID_SIZE, PICKUP_RESPAWN_PLIES } from './constants';
 
 function isAdjacentStep(from: Position, to: Position): boolean {
   const dx = Math.abs(to.x - from.x);
@@ -14,10 +14,6 @@ export function movePlayer(state: GameState, playerId: PlayerId, path: Position[
   }
 
   const player = state.players[playerId];
-  const energyCost = path.length * MOVE_ENERGY_COST_PER_TILE;
-  if (player.energy < energyCost) {
-    throw new Error('Not enough energy for this move');
-  }
 
   let cursor = player.position;
   for (const step of path) {
@@ -35,24 +31,47 @@ export function movePlayer(state: GameState, playerId: PlayerId, path: Position[
 
   const finalPos = cursor;
   const board = state.board.map((row) => row.slice());
-  let energy = player.energy - energyCost;
+  let energy = player.energy;
   let ammo = player.ammo;
 
-  const landedTile = getTile(board, finalPos);
-  if (landedTile.type === 'energyPickup') {
-    energy = Math.min(MAX_ENERGY, energy + ENERGY_PICKUP_VALUE);
-    board[finalPos.y][finalPos.x] = { type: 'empty' };
-  } else if (landedTile.type === 'ammoPickup') {
-    ammo = Math.min(MAX_AMMO, ammo + 1);
-    board[finalPos.y][finalPos.x] = { type: 'empty' };
+  let pendingPickups = state.pendingPickups;
+  for (const step of path) {
+    if (energy < MOVE_ENERGY_COST_PER_TILE) {
+      throw new Error('Not enough energy for this move');
+    }
+    energy -= MOVE_ENERGY_COST_PER_TILE;
+
+    const tile = getTile(board, step);
+    if (tile.type === 'energyPickup') {
+      energy = Math.min(MAX_ENERGY, energy + ENERGY_PICKUP_VALUE);
+      board[step.y][step.x] = { type: 'empty' };
+      pendingPickups = [...pendingPickups, { type: 'energyPickup', pliesRemaining: PICKUP_RESPAWN_PLIES }];
+    } else if (tile.type === 'ammoPickup') {
+      ammo = Math.min(MAX_AMMO, ammo + 1);
+      board[step.y][step.x] = { type: 'empty' };
+      pendingPickups = [...pendingPickups, { type: 'ammoPickup', pliesRemaining: PICKUP_RESPAWN_PLIES }];
+    }
+  }
+
+  // A phantom follows the player, keeping its accumulated offset (clamped on-board).
+  let phantomDisplayPosition = player.phantomDisplayPosition;
+  if (player.isPhantom && phantomDisplayPosition) {
+    const dx = finalPos.x - player.position.x;
+    const dy = finalPos.y - player.position.y;
+    const clamp = (v: number) => Math.max(0, Math.min(GRID_SIZE - 1, v));
+    phantomDisplayPosition = {
+      x: clamp(phantomDisplayPosition.x + dx),
+      y: clamp(phantomDisplayPosition.y + dy),
+    };
   }
 
   return {
     ...state,
     board,
+    pendingPickups,
     players: {
       ...state.players,
-      [playerId]: { ...player, position: finalPos, energy, ammo },
+      [playerId]: { ...player, position: finalPos, energy, ammo, phantomDisplayPosition },
     },
   };
 }

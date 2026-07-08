@@ -12,12 +12,20 @@ export const MAX_MOVE_TILES = 2;
 export const REST_ENERGY_GAIN = 2;
 export const ENERGY_PICKUP_VALUE = 5;
 
+export const PHANTOM_ENERGY_COST = 2;
+
 export const ATTACK_ENERGY_COST = 1;
+export const PUNCH_ENERGY_COST = 2;
 export const SHOOT_AMMO_COST = 1;
-export const BOMB_AMMO_COST = 3;
+export const BOMB_AMMO_COST = 2;
+export const ATTACK_MAX_REPOSITION = 1;
+
+export const ENERGY_PICKUP_COUNT = 4;
+export const AMMO_PICKUP_COUNT = 3;
+export const PICKUP_RESPAWN_PLIES = 4;
 
 export const RESPAWN_IMMUNITY_TURNS = 2;
-export const VISION_RADIUS = 9;
+export const VISION_RADIUS = 8;
 
 export const DEFAULT_DEATH_CAP = 3;
 export const DEFAULT_TARGET_SCORE = 30;
@@ -28,4 +36,6 @@ export const STREAK_SCORE_PER_TURN = 1;
 export const CORNER_ZONES: Record<PlayerId, { x0: number; y0: number }> = {
   p1: { x0: 0, y0: 0 },
   p2: { x0: GRID_SIZE - 2, y0: GRID_SIZE - 2 },
+  p3: { x0: GRID_SIZE - 2, y0: 0 },
+  p4: { x0: 0, y0: GRID_SIZE - 2 },
 };

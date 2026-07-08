@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { createInitialGameState } from './state';
 import { respawnPlayer, tickImmunity } from './respawn';
-import { RESPAWN_IMMUNITY_TURNS } from './constants';
+import { RESPAWN_IMMUNITY_TURNS, START_ENERGY, START_AMMO } from './constants';
 
 describe('respawnPlayer', () => {
   it('revives the player with immunity and a position inside their corner zone', () => {
@@ -12,11 +12,24 @@ describe('respawnPlayer', () => {
     expect(p2.alive).toBe(true);
     expect(p2.immuneTurns).toBe(RESPAWN_IMMUNITY_TURNS);
     expect(p2.currentStreak).toBe(0);
+    expect(p2.energy).toBe(START_ENERGY);
+    expect(p2.ammo).toBe(START_AMMO);
     const zone = p2.cornerZone;
     expect(p2.position.x).toBeGreaterThanOrEqual(zone.x0);
     expect(p2.position.x).toBeLessThanOrEqual(zone.x0 + 1);
     expect(p2.position.y).toBeGreaterThanOrEqual(zone.y0);
     expect(p2.position.y).toBeLessThanOrEqual(zone.y0 + 1);
+  });
+
+  it('resets energy and ammo to starting values on respawn', () => {
+    let state = createInitialGameState('lastStanding');
+    state = {
+      ...state,
+      players: { ...state.players, p2: { ...state.players.p2, alive: false, energy: 0, ammo: 3 } },
+    };
+    const next = respawnPlayer(state, 'p2');
+    expect(next.players.p2.energy).toBe(START_ENERGY);
+    expect(next.players.p2.ammo).toBe(START_AMMO);
   });
 
   it('does not change longestStreak on respawn', () => {

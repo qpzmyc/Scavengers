@@ -15,26 +15,31 @@ export function buildBoard(): Tile[][] {
     board[y][x] = { type };
   };
 
-  // Outer ring of center 5x5 (x,y in [3,7], border cells) -> energy pickups
-  for (let x = 3; x <= 7; x++) {
-    for (let y = 3; y <= 7; y++) {
-      if (x === 3 || x === 7 || y === 3 || y === 7) {
-        set(x, y, 'energyPickup');
-      }
-    }
-  }
+  // Four corners of the central 5x5 -> energy pickups
+  set(3, 3, 'energyPickup');
+  set(7, 3, 'energyPickup');
+  set(3, 7, 'energyPickup');
+  set(7, 7, 'energyPickup');
 
-  // Border of inner 3x3 (x,y in [4,6]) -> ammo pickups
+  // Dead center -> wall
+  set(5, 5, 'wall');
+
+  // 3 random distinct cells within the central 3x3 (excluding center wall) -> ammo pickups
+  const centralCells: Position[] = [];
   for (let x = 4; x <= 6; x++) {
     for (let y = 4; y <= 6; y++) {
-      if (x === 4 || x === 6 || y === 4 || y === 6) {
-        set(x, y, 'ammoPickup');
-      }
+      if (x === 5 && y === 5) continue;
+      centralCells.push({ x, y });
     }
   }
-
-  // Dead center -> wall (overrides ammo pickup at 5,5 set above)
-  set(5, 5, 'wall');
+  const shuffled = centralCells.slice();
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  }
+  for (const cell of shuffled.slice(0, 3)) {
+    set(cell.x, cell.y, 'ammoPickup');
+  }
 
   // Edge-midpoint walls
   set(5, 0, 'wall');

@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { createInitialGameState } from './state';
 import { punch, shoot, traceLine, bomb } from './combat';
-import { ATTACK_ENERGY_COST, SHOOT_AMMO_COST, START_AMMO, START_ENERGY, BOMB_AMMO_COST } from './constants';
+import { PUNCH_ENERGY_COST, SHOOT_AMMO_COST, START_AMMO, START_ENERGY, BOMB_AMMO_COST } from './constants';
 
 function withPositions(state: ReturnType<typeof createInitialGameState>, p1: { x: number; y: number }, p2: { x: number; y: number }) {
   return {
@@ -23,11 +23,11 @@ describe('punch', () => {
     expect(result.state.players.p2.alive).toBe(false);
   });
 
-  it('deducts attack energy cost from the attacker', () => {
+  it('deducts punch energy cost from the attacker', () => {
     let state = createInitialGameState('lastStanding');
     state = withPositions(state, { x: 5, y: 6 }, { x: 5, y: 7 });
     const result = punch(state, 'p1', { x: 5, y: 7 });
-    expect(result.state.players.p1.energy).toBe(START_ENERGY - ATTACK_ENERGY_COST);
+    expect(result.state.players.p1.energy).toBe(START_ENERGY - PUNCH_ENERGY_COST);
   });
 
   it('does not kill a target with active immunity', () => {
@@ -51,6 +51,38 @@ describe('punch', () => {
     state = withPositions(state, { x: 5, y: 6 }, { x: 5, y: 7 });
     state = { ...state, players: { ...state.players, p1: { ...state.players.p1, energy: 0 } } };
     expect(() => punch(state, 'p1', { x: 5, y: 7 })).toThrow();
+  });
+
+  it('throws if attacker has less than PUNCH_ENERGY_COST energy', () => {
+    let state = createInitialGameState('lastStanding');
+    state = withPositions(state, { x: 5, y: 6 }, { x: 5, y: 7 });
+    state = { ...state, players: { ...state.players, p1: { ...state.players.p1, energy: PUNCH_ENERGY_COST - 1 } } };
+    expect(() => punch(state, 'p1', { x: 5, y: 7 })).toThrow();
+  });
+
+  it('kills a victim standing on a ring-neighbor of the targeted tile (not just the exact target)', () => {
+    // Attacker at (5,6). Target S (5,7); ring-neighbors of S are SE (6,7) and SW (4,7).
+    let state = createInitialGameState('lastStanding');
+    state = withPositions(state, { x: 5, y: 6 }, { x: 6, y: 7 });
+    const result = punch(state, 'p1', { x: 5, y: 7 });
+    expect(result.killedPlayerIds).toEqual(['p2']);
+    expect(result.state.players.p2.alive).toBe(false);
+  });
+
+  it('kills a victim on the other ring-neighbor of the targeted tile', () => {
+    let state = createInitialGameState('lastStanding');
+    state = withPositions(state, { x: 5, y: 6 }, { x: 4, y: 7 });
+    const result = punch(state, 'p1', { x: 5, y: 7 });
+    expect(result.killedPlayerIds).toEqual(['p2']);
+    expect(result.state.players.p2.alive).toBe(false);
+  });
+
+  it('does not kill a victim two rings away from the target', () => {
+    // Attacker at (5,6), target N (5,5) is a wall in the default board, use E target instead.
+    let state = createInitialGameState('lastStanding');
+    state = withPositions(state, { x: 5, y: 6 }, { x: 3, y: 7 });
+    const result = punch(state, 'p1', { x: 5, y: 7 });
+    expect(result.killedPlayerIds).toEqual([]);
   });
 });
 
@@ -126,10 +158,20 @@ describe('bomb', () => {
     expect(() => bomb(state, 'p1', { x: 3, y: 7 })).toThrow();
   });
 
-  it('throws if attacker has less than 3 ammo', () => {
+  it('throws if attacker has less than BOMB_AMMO_COST ammo', () => {
     let state = createInitialGameState('lastStanding');
-    state = { ...state, players: { ...state.players, p1: { ...state.players.p1, ammo: 1 } } };
+    state = { ...state, players: { ...state.players, p1: { ...state.players.p1, ammo: BOMB_AMMO_COST - 1 } } };
     expect(() => bomb(state, 'p1', { x: 5, y: 0 })).toThrow();
+  });
+
+  it('succeeds with exactly BOMB_AMMO_COST (2) ammo', () => {
+    let state = createInitialGameState('lastStanding');
+    state = withPositions(state, { x: 0, y: 0 }, { x: 4, y: 0 });
+    state = { ...state, players: { ...state.players, p1: { ...state.players.p1, ammo: 2 } } };
+    expect(BOMB_AMMO_COST).toBe(2);
+    const result = bomb(state, 'p1', { x: 5, y: 0 });
+    expect(result.killedPlayerIds).toEqual(['p2']);
+    expect(result.state.players.p1.ammo).toBe(0);
   });
 
   it('deducts exactly BOMB_AMMO_COST ammo', () => {

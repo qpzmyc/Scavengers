@@ -1,13 +1,12 @@
 import type { GameState, PlayerId } from './types';
 
 export function checkWinCondition(state: GameState): PlayerId | null {
-  const ids: PlayerId[] = ['p1', 'p2'];
+  const ids = state.turnOrder;
 
   if (state.mode === 'lastStanding') {
-    for (const id of ids) {
-      if (state.players[id].deaths >= state.deathCap) {
-        return ids.find((other) => other !== id) ?? null;
-      }
+    const remaining = ids.filter((id) => !state.players[id].eliminated);
+    if (remaining.length === 1) {
+      return remaining[0];
     }
     return null;
   }
