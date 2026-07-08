@@ -11,10 +11,10 @@ describe('createInitialGameState', () => {
     expect(state.players.p2.ammo).toBe(START_AMMO);
   });
 
-  it('places players in their corner zones', () => {
+  it('places players at the true map corner of their spawn zone', () => {
     const state = createInitialGameState('lastStanding');
     expect(state.players.p1.position).toEqual({ x: 0, y: 0 });
-    expect(state.players.p2.position).toEqual({ x: 9, y: 9 });
+    expect(state.players.p2.position).toEqual({ x: 10, y: 10 });
   });
 
   it('starts with p1 as current turn and no winner', () => {

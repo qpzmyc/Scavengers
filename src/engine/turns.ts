@@ -15,7 +15,7 @@ function eliminatePlayer(state: GameState, playerId: PlayerId): GameState {
     ...state,
     players: {
       ...state.players,
-      [playerId]: { ...player, eliminated: true, alive: false },
+      [playerId]: { ...player, eliminated: true, alive: false, isPhantom: false, phantomDisplayPosition: null },
     },
   };
 }

@@ -17,11 +17,11 @@ function withPositions(
 }
 
 describe('4-player game creation', () => {
-  it('creates a turnOrder of length 4 with p3 at (9,0) and p4 at (0,9)', () => {
+  it('creates a turnOrder that walks the corners around the perimeter (p1 -> p3 -> p2 -> p4)', () => {
     const state = createInitialGameState('deathmatch', 4);
-    expect(state.turnOrder).toEqual(['p1', 'p2', 'p3', 'p4']);
-    expect(state.players.p3.position).toEqual({ x: 9, y: 0 });
-    expect(state.players.p4.position).toEqual({ x: 0, y: 9 });
+    expect(state.turnOrder).toEqual(['p1', 'p3', 'p2', 'p4']);
+    expect(state.players.p3.position).toEqual({ x: 10, y: 0 });
+    expect(state.players.p4.position).toEqual({ x: 0, y: 10 });
     expect(state.players.p3.color).toBe('blue');
     expect(state.players.p4.color).toBe('yellow');
     expect(state.players.p3.eliminated).toBe(false);
@@ -39,13 +39,13 @@ describe('4-player game creation', () => {
 });
 
 describe('turn rotation across 4 players', () => {
-  it('cycles p1 -> p2 -> p3 -> p4 -> p1', () => {
+  it('cycles p1 -> p3 -> p2 -> p4 -> p1', () => {
     let state = createInitialGameState('deathmatch', 4);
     state = endTurn(state, 'p1', false);
-    expect(state.currentTurn).toBe('p2');
-    state = endTurn(state, 'p2', false);
     expect(state.currentTurn).toBe('p3');
     state = endTurn(state, 'p3', false);
+    expect(state.currentTurn).toBe('p2');
+    state = endTurn(state, 'p2', false);
     expect(state.currentTurn).toBe('p4');
     state = endTurn(state, 'p4', false);
     expect(state.currentTurn).toBe('p1');
@@ -54,8 +54,8 @@ describe('turn rotation across 4 players', () => {
   it('skips an eliminated player when rotating turns', () => {
     let state = createInitialGameState('deathmatch', 4);
     state = { ...state, players: { ...state.players, p3: { ...state.players.p3, eliminated: true, alive: false } } };
-    state = endTurn(state, 'p2', false);
-    expect(state.currentTurn).toBe('p4');
+    state = endTurn(state, 'p1', false);
+    expect(state.currentTurn).toBe('p2');
   });
 });
 

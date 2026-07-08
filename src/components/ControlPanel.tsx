@@ -7,8 +7,8 @@ export type Flow =
   | { kind: 'menu' }
   | { kind: 'move'; path: Position[] }
   | { kind: 'fakeMove'; target: Position | null }
-  | { kind: 'attackSelect'; type: AttackType | null }
-  | { kind: 'attackMove'; type: AttackType; path: Position[] }
+  | { kind: 'attackReposition'; path: Position[] }
+  | { kind: 'attackSelect'; path: Position[]; type: AttackType | null }
   | { kind: 'attackTarget'; type: AttackType; path: Position[]; target: Position | null }
   | { kind: 'rest' };
 
@@ -32,6 +32,9 @@ interface ControlPanelProps {
   onConfirm: () => void;
   onBack: () => void;
   onCancel: () => void;
+  // Available width (matches the board's width) that the action buttons should
+  // fill edge-to-edge, scaling their padding/font proportionally.
+  width?: number;
 }
 
 const ATTACK_TARGET_HINT: Record<AttackType, string> = {
@@ -51,6 +54,28 @@ const baseBtn: React.CSSProperties = {
   cursor: 'pointer',
   transition: 'background 0.15s, border-color 0.15s',
 };
+
+// A row of action buttons stretches to fill the full available width (matching
+// the board), with each button growing equally and its padding/font scaling
+// proportionally to that width.
+const DEFAULT_ROW_WIDTH = 320;
+
+function row(): React.CSSProperties {
+  return { display: 'flex', gap: 8, marginTop: 6 };
+}
+
+function sizedBtn(variant: Variant, disabled: boolean, active: boolean, width: number): React.CSSProperties {
+  const fontSize = Math.max(13, Math.min(22, width / 18));
+  const paddingV = Math.max(8, Math.min(18, width / 26));
+  const paddingH = Math.max(10, Math.min(24, width / 18));
+  return {
+    ...btn(variant, disabled, active),
+    flex: 1,
+    margin: 0,
+    fontSize,
+    padding: `${paddingV}px ${paddingH}px`,
+  };
+}
 
 function btn(variant: Variant, disabled: boolean, active = false): React.CSSProperties {
   if (disabled) {
@@ -85,6 +110,7 @@ export function ControlPanel({
   onConfirm,
   onBack,
   onCancel,
+  width = DEFAULT_ROW_WIDTH,
 }: ControlPanelProps) {
   if (gameOver) {
     return <div style={{ ...wrap, fontStyle: 'italic', color: theme.textMuted }}>Game over — start a new game above.</div>;
@@ -95,11 +121,13 @@ export function ControlPanel({
     return (
       <div style={wrap} data-testid="control-panel">
         <div style={title}>Choose an action</div>
-        <div style={{ marginTop: 6 }}>
-          <button style={btn('secondary', !can.move)} disabled={!can.move} onClick={() => onSelectAction('move')}>Move</button>
-          <button style={btn('secondary', !can.attack)} disabled={!can.attack} onClick={() => onSelectAction('attack')}>Attack</button>
-          <button style={btn('secondary', !can.fake)} disabled={!can.fake} onClick={() => onSelectAction('fake')}>Fake Move</button>
-          <button style={btn('secondary', false)} onClick={() => onSelectAction('rest')}>Rest</button>
+        <div style={row()}>
+          {/* Never HTML-disabled: clicking while unaffordable is handled by the
+              caller, which shows a "not enough X" toast instead of doing nothing. */}
+          <button style={sizedBtn('secondary', !can.move, false, width)} onClick={() => onSelectAction('move')}>Move</button>
+          <button style={sizedBtn('secondary', !can.attack, false, width)} onClick={() => onSelectAction('attack')}>Attack</button>
+          <button style={sizedBtn('secondary', !can.fake, false, width)} onClick={() => onSelectAction('fake')}>Fake Move</button>
+          <button style={sizedBtn('secondary', false, false, width)} onClick={() => onSelectAction('rest')}>Rest</button>
         </div>
         {noEnergyNote && <div style={hint}>Out of energy — only Rest is available this turn.</div>}
       </div>
@@ -111,8 +139,10 @@ export function ControlPanel({
       <div style={wrap} data-testid="control-panel">
         <div style={title}>Move</div>
         <div style={hint}>Click an adjacent square (up to 2 steps). Chosen: {flow.path.length}/2. Click your last step to undo it.</div>
-        <button style={btn('secondary', false)} onClick={onCancel}>Cancel</button>
-        <button style={btn('primary', !confirmEnabled)} disabled={!confirmEnabled} onClick={onConfirm}>Confirm</button>
+        <div style={row()}>
+          <button style={sizedBtn('secondary', false, false, width)} onClick={onCancel}>Cancel</button>
+          <button style={sizedBtn('primary', !confirmEnabled, false, width)} disabled={!confirmEnabled} onClick={onConfirm}>Confirm</button>
+        </div>
       </div>
     );
   }
@@ -122,8 +152,10 @@ export function ControlPanel({
       <div style={wrap} data-testid="control-panel">
         <div style={title}>Rest</div>
         <div style={hint}>Recover +2 energy (up to the max). You forfeit moving or attacking this turn.</div>
-        <button style={btn('secondary', false)} onClick={onCancel}>Cancel</button>
-        <button style={btn('primary', false)} onClick={onConfirm}>Confirm</button>
+        <div style={row()}>
+          <button style={sizedBtn('secondary', false, false, width)} onClick={onCancel}>Cancel</button>
+          <button style={sizedBtn('primary', false, false, width)} onClick={onConfirm}>Confirm</button>
+        </div>
       </div>
     );
   }
@@ -133,8 +165,25 @@ export function ControlPanel({
       <div style={wrap} data-testid="control-panel">
         <div style={title}>Fake Move</div>
         <div style={hint}>Click an adjacent square to project a phantom there (you stay put).</div>
-        <button style={btn('secondary', false)} onClick={onCancel}>Cancel</button>
-        <button style={btn('primary', !confirmEnabled)} disabled={!confirmEnabled} onClick={onConfirm}>Confirm</button>
+        <div style={row()}>
+          <button style={sizedBtn('secondary', false, false, width)} onClick={onCancel}>Cancel</button>
+          <button style={sizedBtn('primary', !confirmEnabled, false, width)} disabled={!confirmEnabled} onClick={onConfirm}>Confirm</button>
+        </div>
+      </div>
+    );
+  }
+
+  if (flow.kind === 'attackReposition') {
+    return (
+      <div style={wrap} data-testid="control-panel">
+        <div style={title}>Attack — reposition (optional)</div>
+        <div style={hint}>
+          Click an adjacent square to step before choosing a weapon (up to 1 step), or skip straight to picking one. Chosen: {flow.path.length}. Click your last step to undo it. Moving costs 1 energy per tile.
+        </div>
+        <div style={row()}>
+          <button style={sizedBtn('secondary', false, false, width)} onClick={onBack}>Back</button>
+          <button style={sizedBtn('primary', false, false, width)} onClick={onNext}>{flow.path.length ? 'Next' : 'Skip'}</button>
+        </div>
       </div>
     );
   }
@@ -143,28 +192,17 @@ export function ControlPanel({
     return (
       <div style={wrap} data-testid="control-panel">
         <div style={title}>Attack — choose a weapon</div>
-        <div style={{ marginTop: 6 }}>
-          <button style={btn('toggle', !can.punch, flow.type === 'punch')} disabled={!can.punch} onClick={() => onSelectAttackType('punch')}>Punch</button>
-          <button style={btn('toggle', !can.shoot, flow.type === 'shoot')} disabled={!can.shoot} onClick={() => onSelectAttackType('shoot')}>Shoot</button>
-          <button style={btn('toggle', !can.bomb, flow.type === 'bomb')} disabled={!can.bomb} onClick={() => onSelectAttackType('bomb')}>Bomb</button>
+        <div style={row()}>
+          {/* Always the same (non-greyed) style, regardless of affordability — the
+              toast notification is the feedback mechanism now, not a dimmed button. */}
+          <button style={sizedBtn('toggle', false, flow.type === 'punch', width)} onClick={() => onSelectAttackType('punch')}>Punch</button>
+          <button style={sizedBtn('toggle', false, flow.type === 'shoot', width)} onClick={() => onSelectAttackType('shoot')}>Shoot</button>
+          <button style={sizedBtn('toggle', false, flow.type === 'bomb', width)} onClick={() => onSelectAttackType('bomb')}>Bomb</button>
         </div>
-        <div style={{ marginTop: 10 }}>
-          <button style={btn('secondary', false)} onClick={onBack}>Back</button>
-          <button style={btn('primary', flow.type === null)} disabled={flow.type === null} onClick={onNext}>Next</button>
+        <div style={row()}>
+          <button style={sizedBtn('secondary', false, false, width)} onClick={onBack}>Back</button>
+          <button style={sizedBtn('primary', flow.type === null, false, width)} disabled={flow.type === null} onClick={onNext}>Next</button>
         </div>
-      </div>
-    );
-  }
-
-  if (flow.kind === 'attackMove') {
-    return (
-      <div style={wrap} data-testid="control-panel">
-        <div style={{ ...title, textTransform: 'capitalize' }}>{flow.type} — reposition (optional)</div>
-        <div style={hint}>
-          Click an adjacent square to step toward your target before attacking (up to 1 step), or skip straight to aiming. Chosen: {flow.path.length}. Click your last step to undo it. Moving costs 1 energy per tile.
-        </div>
-        <button style={btn('secondary', false)} onClick={onBack}>Back</button>
-        <button style={btn('primary', false)} onClick={onNext}>{flow.path.length ? 'Next' : 'Skip'}</button>
       </div>
     );
   }
@@ -174,8 +212,10 @@ export function ControlPanel({
     <div style={wrap} data-testid="control-panel">
       <div style={{ ...title, textTransform: 'capitalize' }}>{flow.kind === 'attackTarget' ? flow.type : ''}</div>
       <div style={hint}>{flow.kind === 'attackTarget' ? ATTACK_TARGET_HINT[flow.type] : ''}</div>
-      <button style={btn('secondary', false)} onClick={onBack}>Back</button>
-      <button style={btn('primary', !confirmEnabled)} disabled={!confirmEnabled} onClick={onConfirm}>Confirm</button>
+      <div style={row()}>
+        <button style={sizedBtn('secondary', false, false, width)} onClick={onBack}>Back</button>
+        <button style={sizedBtn('primary', !confirmEnabled, false, width)} disabled={!confirmEnabled} onClick={onConfirm}>Confirm</button>
+      </div>
     </div>
   );
 }

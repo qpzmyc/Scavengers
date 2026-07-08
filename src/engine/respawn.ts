@@ -20,6 +20,9 @@ export function respawnPlayer(state: GameState, playerId: PlayerId): GameState {
         currentStreak: 0,
         energy: START_ENERGY,
         ammo: START_AMMO,
+        // Dying clears any active phantom — a fresh respawn shouldn't drag a stale decoy along.
+        isPhantom: false,
+        phantomDisplayPosition: null,
       },
     },
   };

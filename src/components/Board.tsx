@@ -37,6 +37,9 @@ interface BoardProps {
   onTileClick?: (pos: Position) => void;
   redTints?: RedTint[];
   deathAnims?: DeathAnim[];
+  // Tiles a pending (unconfirmed) attack would hit — flashed on a continuous loop
+  // to preview the shot, as opposed to `redTints`' one-shot post-confirm ripple.
+  previewTints?: Position[];
 }
 
 const HIGHLIGHT_STYLES: Record<HighlightKind, { background: string; border: string }> = {
@@ -88,7 +91,16 @@ function PickupMarker({ type, size }: { type: 'energyPickup' | 'ammoPickup'; siz
   );
 }
 
-export function Board({ state, viewerId, cellPixelSize = 40, highlights = [], onTileClick, redTints = [], deathAnims = [] }: BoardProps) {
+export function Board({
+  state,
+  viewerId,
+  cellPixelSize = 40,
+  highlights = [],
+  onTileClick,
+  redTints = [],
+  deathAnims = [],
+  previewTints = [],
+}: BoardProps) {
   const highlightMap = new Map<string, HighlightKind>();
   for (const h of highlights) highlightMap.set(`${h.x},${h.y}`, h.kind);
   const spawnTints = buildSpawnTints(state);
@@ -184,12 +196,31 @@ export function Board({ state, viewerId, cellPixelSize = 40, highlights = [], on
             top: t.y * cellPixelSize + 6,
             width: cellPixelSize,
             height: cellPixelSize,
-            background: 'rgba(231, 76, 60, 0.28)',
+            background: 'rgba(231, 76, 60, 0.82)',
+            opacity: 0,
             pointerEvents: 'none',
             zIndex: 6,
-            animation: 'redTintPulse 0.5s ease-out',
+            // Fade in (staggered by delayMs) and hold lit; the whole set is cleared
+            // together when the animation frame ends. Duration matches TINT_FADE_MS.
+            animation: 'redTintOn 0.16s ease-out',
             animationDelay: `${t.delayMs}ms`,
-            animationFillMode: 'both',
+            animationFillMode: 'forwards',
+          }}
+        />
+      ))}
+      {previewTints.map((t, i) => (
+        <div
+          key={`preview-tint-${t.x}-${t.y}-${i}`}
+          style={{
+            position: 'absolute',
+            left: t.x * cellPixelSize + 6,
+            top: t.y * cellPixelSize + 6,
+            width: cellPixelSize,
+            height: cellPixelSize,
+            background: 'rgba(231, 76, 60, 0.5)',
+            pointerEvents: 'none',
+            zIndex: 6,
+            animation: 'redTintPulseLoop 0.9s ease-in-out infinite',
           }}
         />
       ))}

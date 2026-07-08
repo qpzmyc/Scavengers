@@ -20,6 +20,10 @@ import {
   MOVE_ENERGY_COST_PER_TILE,
   ENERGY_PICKUP_VALUE,
   MAX_ENERGY,
+  PUNCH_ENERGY_COST,
+  SHOOT_AMMO_COST,
+  BOMB_AMMO_COST,
+  ATTACK_ENERGY_COST,
   traceLine,
 } from './engine';
 import type { PlayerId } from './engine';
@@ -36,8 +40,9 @@ const REPLAY_END_MS = 900; // pause after the replay finishes, before control is
 const MOVE_STEP_MS = 550; // hold time for an intermediate step of a 2-tile move
 const DEATH_OUT_MS = 900; // hold time for the death fade-out frame
 const DEATH_IN_MS = 1100; // hold time for the death fade-in (respawn) frame
-const TINT_PULSE_MS = 500; // must match the redTintPulse CSS animation duration
-const TINT_STEP = TINT_PULSE_MS; // per-tile delay step for sequential (one-at-a-time) tints
+const TINT_FADE_MS = 160; // per-tile fade-in duration (must match Board's redTintOn animation)
+const TINT_STEP = 95; // per-tile stagger: tiles light up one after another, fast, and STAY lit
+const TINT_HOLD_MS = 300; // dwell with every tile lit before they all clear together
 
 type Phase = 'playing' | 'result' | 'handoff' | 'replaying';
 
@@ -76,6 +81,35 @@ function rayTiles(from: Position): Position[] {
       tiles.push(c);
       c = { x: c.x + d.x, y: c.y + d.y };
     }
+  }
+  return tiles;
+}
+
+// The tiles a punch/shoot/bomb would actually hit from `from`, aimed at `target`.
+// Shared by the final one-shot attack ripple and the live "preview the shot"
+// flashing highlight shown while the player is still choosing a target.
+function computeHitTiles(board: GameState['board'], type: AttackType, from: Position, target: Position): Position[] {
+  if (type === 'shoot') {
+    const dir = { x: target.x - from.x, y: target.y - from.y };
+    return traceLine(board, from, dir);
+  }
+  if (type === 'bomb') {
+    const tiles: Position[] = [{ x: target.x, y: target.y }];
+    for (const d of DIRS8) {
+      const p = { x: target.x + d.x, y: target.y + d.y };
+      if (isInBounds(p)) tiles.push(p);
+    }
+    return tiles;
+  }
+  // punch: the targeted ring tile plus its two neighbors in the ring of 8 around
+  // the attack origin — mirrors the engine's 3-tile hit exactly.
+  const ringIdx = DIRS8.findIndex((d) => eq({ x: from.x + d.x, y: from.y + d.y }, target));
+  const idxs = ringIdx === -1 ? [] : [(ringIdx - 1 + 8) % 8, ringIdx, (ringIdx + 1) % 8];
+  const tiles: Position[] = [];
+  for (const k of idxs) {
+    const d = DIRS8[k];
+    const p = { x: from.x + d.x, y: from.y + d.y };
+    if (isInBounds(p)) tiles.push(p);
   }
   return tiles;
 }
@@ -125,6 +159,14 @@ function App() {
     { id: number; killerColor: string; killerName: string; victimColor: string; victimName: string; verb: string }[]
   >([]);
   const notificationIdRef = useRef(0);
+
+  // Ephemeral sliding toast feed — independent of the persistent Kills panel above.
+  // Used for "not enough X to Y" warnings and kill/extra-turn announcements. Each
+  // entry auto-dismisses on its own timer, and spamming the trigger just stacks
+  // more toasts (newest on top), like a real notification feed.
+  const [actionNotices, setActionNotices] = useState<{ id: number; text: string; kind: 'warning' | 'kill'; leaving?: boolean }[]>([]);
+  const actionNoticeIdRef = useRef(0);
+
   // Death/respawn choreography for all victims of an attack: each fades out at its
   // death spot, then (if not eliminated) fades/pops back in at its respawn spot.
   const [deathAnims, setDeathAnims] = useState<DeathAnim[]>([]);
@@ -132,8 +174,12 @@ function App() {
   const [redTints, setRedTints] = useState<RedTint[]>([]);
 
   // Replay bookkeeping (kept in refs so React StrictMode double-render can't duplicate them).
-  const actorLogRef = useRef<AnimFrame[]>([]); // the current actor's action frames, accumulated
-  const turnStartRef = useRef<GameState>(state); // board as the upcoming viewer last saw it
+  // With >2 players, a given player may sit out several other players' turns before
+  // their own comes back around, so both the "last seen" baseline and the pending
+  // frame log are tracked per-player rather than as a single shared value.
+  const actorLogRef = useRef<AnimFrame[]>([]); // frames accumulated during the current actor's ongoing turn (may span several confirms on kill-granted extra turns)
+  const turnStartRef = useRef<Record<PlayerId, GameState>>({} as Record<PlayerId, GameState>); // per-player: board state as that player last saw it
+  const pendingLogRef = useRef<Record<PlayerId, AnimFrame[]>>({} as Record<PlayerId, AnimFrame[]>); // per-player: all intervening turns' frames not yet replayed to them
   const replayRef = useRef<AnimFrame[]>([]); // frames to animate when the next player starts
   const timersRef = useRef<number[]>([]);
 
@@ -144,6 +190,19 @@ function App() {
   const clearTimers = () => {
     timersRef.current.forEach(clearTimeout);
     timersRef.current = [];
+  };
+
+  const pushActionNotice = (text: string, kind: 'warning' | 'kill' = 'warning') => {
+    const id = actionNoticeIdRef.current++;
+    setActionNotices((list) => [{ id, text, kind }, ...list]);
+    // Two-stage dismissal: flip to `leaving` (plays the fade-out keyframe), then
+    // remove from the DOM once that animation has finished.
+    schedule(2600, () => {
+      setActionNotices((list) => list.map((n) => (n.id === id ? { ...n, leaving: true } : n)));
+      schedule(360, () => {
+        setActionNotices((list) => list.filter((n) => n.id !== id));
+      });
+    });
   };
 
   const gameOver = state.winner !== null;
@@ -164,8 +223,16 @@ function App() {
     setRedTints([]);
     setDeathAnims([]);
     setNotifications([]);
+    setActionNotices([]);
     actorLogRef.current = [];
-    turnStartRef.current = s;
+    const starts = {} as Record<PlayerId, GameState>;
+    const logs = {} as Record<PlayerId, AnimFrame[]>;
+    for (const id of s.turnOrder) {
+      starts[id] = s;
+      logs[id] = [];
+    }
+    turnStartRef.current = starts;
+    pendingLogRef.current = logs;
     replayRef.current = [];
   };
 
@@ -176,11 +243,11 @@ function App() {
   };
 
   const can: Capabilities = {
-    move: me.energy >= 1,
-    punch: me.energy >= 1,
-    shoot: me.energy >= 1,
-    bomb: me.energy >= 1,
-    attack: me.energy >= 1,
+    move: me.energy >= MOVE_ENERGY_COST_PER_TILE,
+    punch: me.energy >= PUNCH_ENERGY_COST,
+    shoot: me.ammo >= SHOOT_AMMO_COST && me.energy >= ATTACK_ENERGY_COST,
+    bomb: me.ammo >= BOMB_AMMO_COST && me.energy >= ATTACK_ENERGY_COST,
+    attack: me.energy >= ATTACK_ENERGY_COST,
     fake: me.energy >= PHANTOM_ENERGY_COST,
   };
 
@@ -208,11 +275,11 @@ function App() {
         highlights.push({ x: p.x, y: p.y, kind: 'candidate' });
       }
       if (flow.target) highlights.push({ x: flow.target.x, y: flow.target.y, kind: 'selected' });
-    } else if (flow.kind === 'attackMove') {
+    } else if (flow.kind === 'attackReposition') {
       const cursor = flow.path.length ? flow.path[flow.path.length - 1] : me.position;
       // Allow a reposition step as long as the step itself is affordable (a step onto
       // an energy pickup can fund further steps); affordability of the attack itself
-      // is enforced separately at Confirm time.
+      // is enforced separately once a weapon is chosen.
       const remainingEnergy = simulateEnergyAfterPath(state.board, me.energy, flow.path);
       if (flow.path.length < ATTACK_MAX_REPOSITION && remainingEnergy >= MOVE_ENERGY_COST_PER_TILE) {
         for (const p of neighbors(state.board, cursor)) {
@@ -234,6 +301,33 @@ function App() {
   const dedupedHighlights = highlights.filter((h) => h.kind === 'selected' || !selectedKeys.has(`${h.x},${h.y}`));
   const isCandidate = (pos: Position) => dedupedHighlights.some((h) => h.x === pos.x && h.y === pos.y);
 
+  // While aiming (a target is chosen but not yet confirmed), continuously flash every
+  // tile the shot would actually hit, so the player can preview the attack's area.
+  let previewHitTiles: Position[] = [];
+  if (interactive && flow.kind === 'attackTarget' && flow.target) {
+    const from = flow.path.length ? flow.path[flow.path.length - 1] : me.position;
+    previewHitTiles = computeHitTiles(state.board, flow.type, from, flow.target);
+  }
+
+  // While building a move or an attack's optional reposition, show the actor's
+  // token at the tentatively chosen tile so it visibly steps there on each click;
+  // cancelling reverts `flow` to 'menu', so this preview naturally falls away.
+  let boardState = display;
+  if (
+    interactive &&
+    (flow.kind === 'move' || flow.kind === 'attackReposition' || flow.kind === 'attackSelect' || flow.kind === 'attackTarget') &&
+    flow.path.length
+  ) {
+    const previewPos = flow.path[flow.path.length - 1];
+    boardState = {
+      ...display,
+      players: {
+        ...display.players,
+        [viewerId]: { ...display.players[viewerId], position: previewPos },
+      },
+    };
+  }
+
   const handleTileClick = (pos: Position) => {
     if (!interactive) return;
     if (flow.kind === 'move') {
@@ -243,10 +337,10 @@ function App() {
     } else if (flow.kind === 'fakeMove') {
       if (flow.target && eq(flow.target, pos)) setFlow({ kind: 'fakeMove', target: null });
       else if (isCandidate(pos)) setFlow({ kind: 'fakeMove', target: pos });
-    } else if (flow.kind === 'attackMove') {
+    } else if (flow.kind === 'attackReposition') {
       const last = flow.path[flow.path.length - 1];
-      if (last && eq(last, pos)) setFlow({ kind: 'attackMove', type: flow.type, path: flow.path.slice(0, -1) });
-      else if (isCandidate(pos)) setFlow({ kind: 'attackMove', type: flow.type, path: [...flow.path, pos] });
+      if (last && eq(last, pos)) setFlow({ kind: 'attackReposition', path: flow.path.slice(0, -1) });
+      else if (isCandidate(pos)) setFlow({ kind: 'attackReposition', path: [...flow.path, pos] });
     } else if (flow.kind === 'attackTarget') {
       if (flow.target && eq(flow.target, pos)) setFlow({ kind: 'attackTarget', type: flow.type, path: flow.path, target: null });
       else if (isCandidate(pos)) setFlow({ kind: 'attackTarget', type: flow.type, path: flow.path, target: pos });
@@ -286,8 +380,10 @@ function App() {
     next: GameState,
     turnPasses: boolean,
     frames: AnimFrame[],
-    victims: { victimId: PlayerId; deathPos: Position; respawnPos: Position | null; verb: string }[] = []
+    victims: { victimId: PlayerId; deathPos: Position; respawnPos: Position | null; verb: string }[] = [],
+    killNoticeDelayMs = 0
   ) => {
+    const actorId = state.currentTurn;
     actorLogRef.current.push(...frames);
     setState(acted); // actor is still currentTurn here, so their bars show the updated resources
     setFlow({ kind: 'menu' });
@@ -309,6 +405,15 @@ function App() {
         });
         return [...list, ...additions];
       });
+
+      // One combined toast covers double/triple kills too, instead of one per victim.
+      const victimNames = victims.map((v) => acted.players[v.victimId].color.toUpperCase());
+      const killMsg =
+        next.winner === null
+          ? `Killed ${victimNames.join(', ')} — +1 extra turn!`
+          : `Killed ${victimNames.join(', ')}!`;
+      // Delay so the toast appears only once the ripple has lit the victim's square.
+      schedule(killNoticeDelayMs, () => pushActionNotice(killMsg, 'kill'));
     }
 
     playFrames(frames, () => {
@@ -319,8 +424,26 @@ function App() {
       if (next.winner !== null) {
         setPhase('playing'); // game over screen
       } else if (turnPasses) {
-        replayRef.current = [plainFrame(turnStartRef.current, 0), ...actorLogRef.current];
+        // This actor has already watched their own turn live, so `next` becomes the
+        // baseline for THEIR next replay (whenever their turn comes back around) —
+        // updating this here, right as their turn ends, is what lets it carry forward
+        // correctly even the very first time (which never goes through `startTurn`).
+        turnStartRef.current = { ...turnStartRef.current, [actorId]: next };
+        pendingLogRef.current = { ...pendingLogRef.current, [actorId]: [] };
+
+        // Flush this whole turn's frames (which may span several confirms if the
+        // actor chained kills) into every other player's pending log, so whoever's
+        // turn is coming up next sees every turn they've missed, not just this one.
+        for (const id of next.turnOrder) {
+          if (id === actorId) continue;
+          pendingLogRef.current[id] = [...(pendingLogRef.current[id] ?? []), ...actorLogRef.current];
+        }
         actorLogRef.current = [];
+        const nextId = next.currentTurn;
+        replayRef.current = [
+          plainFrame(turnStartRef.current[nextId] ?? next, 0),
+          ...(pendingLogRef.current[nextId] ?? []),
+        ];
         setPhase('handoff');
       } else {
         setPhase('playing'); // extra turn — same actor keeps going
@@ -328,31 +451,24 @@ function App() {
     });
   };
 
-  // Builds the death-fade frames for ALL victims of an attack, animated together:
-  // one frame with everyone fading out at their death spot, then (only if at least
-  // one victim respawns) a second frame with respawning victims fading back in.
-  // Eliminated victims (respawnPos null) appear only in the 'out' frame.
-  const buildDeathFrames = (
+  // Builds the death-fade frames for ALL victims of an attack, played AFTER the
+  // frame that already carries the 'out' fade (see the call site): only the
+  // respawn 'in' frame remains here. Eliminated victims (respawnPos null) never
+  // reach this — they stay faded out from the merged ripple+out frame.
+  const buildRespawnFrames = (
     afterState: GameState,
     victims: { victimId: PlayerId; deathPos: Position; respawnPos: Position | null }[]
   ): AnimFrame[] => {
-    const outFrame: AnimFrame = {
-      display: afterState,
-      redTints: [],
-      death: victims.map((v) => ({ playerId: v.victimId, deathPos: v.deathPos, respawnPos: v.respawnPos, stage: 'out' as const })),
-      holdMs: DEATH_OUT_MS,
-    };
     const respawning = victims.filter((v) => v.respawnPos !== null);
-    const frames: AnimFrame[] = [outFrame];
-    if (respawning.length) {
-      frames.push({
+    if (!respawning.length) return [];
+    return [
+      {
         display: afterState,
         redTints: [],
         death: respawning.map((v) => ({ playerId: v.victimId, deathPos: v.deathPos, respawnPos: v.respawnPos, stage: 'in' as const })),
         holdMs: DEATH_IN_MS,
-      });
-    }
-    return frames;
+      },
+    ];
   };
 
   const handleConfirm = () => {
@@ -363,13 +479,16 @@ function App() {
       if (flow.kind === 'move') {
         const acted = movePlayer(state, actorId, flow.path);
         const next = endTurn(acted, actorId, false);
-        const frames: AnimFrame[] = [];
+        // Snap back to the real starting tile first (the live preview while building
+        // the path already showed the destination), then step through the path so the
+        // whole movement plays out instead of jumping straight there.
+        const frames: AnimFrame[] = [plainFrame(state, MOVE_STEP_MS)];
         if (flow.path.length === 2) {
           const mid = movePlayer(state, actorId, [flow.path[0]]);
           frames.push(plainFrame(mid, MOVE_STEP_MS));
-          frames.push(plainFrame(acted, Math.max(MOVE_STEP_MS, RESULT_MS - MOVE_STEP_MS)));
+          frames.push(plainFrame(acted, Math.max(MOVE_STEP_MS, RESULT_MS - 2 * MOVE_STEP_MS)));
         } else {
-          frames.push(plainFrame(acted, RESULT_MS));
+          frames.push(plainFrame(acted, Math.max(MOVE_STEP_MS, RESULT_MS - MOVE_STEP_MS)));
         }
         applyResult(acted, next, true, frames);
       } else if (flow.kind === 'rest') {
@@ -392,37 +511,20 @@ function App() {
         const gotKill = result.killedPlayerIds.length > 0;
         const next = endTurn(acted, actorId, gotKill);
 
-        // Compute the red-tint ripple tiles for this attack, staggered by wave/index.
-        // Delays are deliberately long/spaced so the ripple reads as a sequence, not a flash.
-        const tints: RedTint[] = [];
-        if (flow.type === 'shoot') {
-          const dir = { x: t.x - from.x, y: t.y - from.y };
-          const line = traceLine(state.board, from, dir);
-          // One tile lit at a time, closest first: step the delay by at least the full
-          // pulse duration so no two tiles are ever lit simultaneously.
-          line.forEach((p, i) => tints.push({ x: p.x, y: p.y, delayMs: i * TINT_STEP }));
-        } else if (flow.type === 'bomb') {
-          tints.push({ x: t.x, y: t.y, delayMs: 0 });
-          for (const d of DIRS8) {
-            const p = { x: t.x + d.x, y: t.y + d.y };
-            if (isInBounds(p)) tints.push({ x: p.x, y: p.y, delayMs: 450 });
-          }
-        } else if (flow.type === 'punch') {
-          // Punch hits the targeted ring tile plus its two neighbors in the ring of 8
-          // around the attack origin — mirror the engine's 3-tile hit exactly.
-          const ringIdx = DIRS8.findIndex((d) => eq({ x: from.x + d.x, y: from.y + d.y }, t));
-          const idxs = ringIdx === -1 ? [] : [(ringIdx - 1 + 8) % 8, ringIdx, (ringIdx + 1) % 8];
-          for (const k of idxs) {
-            const d = DIRS8[k];
-            const p = { x: from.x + d.x, y: from.y + d.y };
-            if (isInBounds(p)) tints.push({ x: p.x, y: p.y, delayMs: 0 });
-          }
-        }
+        // Compute the red-tint ripple tiles for this attack. Each tile fades in
+        // (closest first) staggered by TINT_STEP and then STAYS lit; they all clear
+        // together when this frame ends. hitTiles are already ordered by proximity.
+        const hitTiles = computeHitTiles(state.board, flow.type, from, t);
+        const tints: RedTint[] = hitTiles.map((p, i) => ({ x: p.x, y: p.y, delayMs: i * TINT_STEP }));
         const maxTintDelay = tints.reduce((m, t2) => Math.max(m, t2.delayMs), 0);
-        const attackHoldMs = Math.max(RESULT_MS, maxTintDelay + TINT_PULSE_MS);
+        // Hold until the last tile has finished fading in, then dwell fully-lit briefly.
+        const attackHoldMs = Math.max(RESULT_MS, maxTintDelay + TINT_FADE_MS + TINT_HOLD_MS);
 
         const frames: AnimFrame[] = [];
         if (flow.path.length) {
+          // Same snap-back-then-step treatment as a plain move, for the optional
+          // reposition step before the attack lands.
+          frames.push(plainFrame(state, MOVE_STEP_MS));
           const mid = movePlayer(state, actorId, flow.path);
           frames.push(plainFrame(mid, MOVE_STEP_MS));
         }
@@ -439,17 +541,54 @@ function App() {
         }));
 
         if (victims.length) {
-          // Attack frame's hold only needs to cover the ripple; the death frames follow.
-          frames.push({ display: acted, redTints: tints, death: [], holdMs: maxTintDelay + TINT_PULSE_MS });
-          frames.push(...buildDeathFrames(acted, victims));
+          // `acted` already reflects each victim's post-respawn position (resolveAttack
+          // already ran), so this frame must carry the 'out' death fade FROM THE START —
+          // otherwise the victim would render normally (already at home) for the ripple's
+          // duration, then visibly jump backward to their death spot when the fade begins.
+          frames.push({
+            display: acted,
+            redTints: tints,
+            death: victims.map((v) => ({ playerId: v.victimId, deathPos: v.deathPos, respawnPos: v.respawnPos, stage: 'out' as const })),
+            holdMs: Math.max(maxTintDelay + TINT_FADE_MS + TINT_HOLD_MS, DEATH_OUT_MS),
+          });
+          frames.push(...buildRespawnFrames(acted, victims));
         } else {
           frames.push({ display: acted, redTints: tints, death: [], holdMs: attackHoldMs });
         }
 
-        applyResult(acted, next, !gotKill, frames, victims);
+        // Hold the kill toast until the ripple actually reaches (lights up) the
+        // victim's square. Any reposition frames play before the ripple frame, so
+        // account for those too; use the last-lit victim tile for multi-kills.
+        const preRippleMs = flow.path.length ? 2 * MOVE_STEP_MS : 0;
+        const victimTintDelay = victims.reduce((m, v) => {
+          const tile = tints.find((ti) => ti.x === v.deathPos.x && ti.y === v.deathPos.y);
+          return Math.max(m, tile ? tile.delayMs : 0);
+        }, 0);
+        const killNoticeDelayMs = preRippleMs + victimTintDelay + TINT_FADE_MS;
+
+        applyResult(acted, next, !gotKill, frames, victims, killNoticeDelayMs);
       }
     } catch (err) {
       console.error(err);
+      // The pre-flight checks in handleSelectAction/handleSelectAttackType catch
+      // insufficient resources before the player even gets this far, but fall back
+      // to a generic notice if the engine still rejects the confirmed action.
+      let message = 'Cannot complete this action.';
+      if (flow.kind === 'move') message = 'Not enough energy to move.';
+      else if (flow.kind === 'fakeMove') message = 'Not enough energy to fake move.';
+      else if (flow.kind === 'attackTarget') {
+        message =
+          flow.type === 'punch'
+            ? 'Not enough energy to punch.'
+            : flow.type === 'shoot'
+            ? me.ammo < SHOOT_AMMO_COST
+              ? 'Not enough ammo to shoot.'
+              : 'Not enough energy to shoot.'
+            : me.ammo < BOMB_AMMO_COST
+            ? 'Not enough ammo to bomb.'
+            : 'Not enough energy to bomb.';
+      }
+      pushActionNotice(message);
     }
   };
 
@@ -465,11 +604,12 @@ function App() {
     schedule(REPLAY_START_MS, () => {
       playFrames(rest, () => {
         // Let the final frame settle before handing control to the current player.
+        // (turnStartRef/pendingLogRef for this player were already advanced to `next`
+        // the moment their turn ended, in applyResult — not here.)
         schedule(REPLAY_END_MS, () => {
           setDisplay(state);
           setRedTints([]);
           setDeathAnims([]);
-          turnStartRef.current = state;
           replayRef.current = [];
           setFlow({ kind: 'menu' });
           setPhase('playing');
@@ -479,30 +619,46 @@ function App() {
   };
 
   const handleSelectAction = (action: 'move' | 'attack' | 'fake' | 'rest') => {
-    if (action === 'move') setFlow({ kind: 'move', path: [] });
-    else if (action === 'attack') setFlow({ kind: 'attackSelect', type: null });
-    else if (action === 'fake') setFlow({ kind: 'fakeMove', target: null });
-    else setFlow({ kind: 'rest' });
+    if (action === 'move') {
+      if (!can.move) return pushActionNotice('Not enough energy to move.');
+      setFlow({ kind: 'move', path: [] });
+    } else if (action === 'attack') {
+      if (!can.attack) return pushActionNotice('Not enough energy to attack.');
+      setFlow({ kind: 'attackReposition', path: [] });
+    } else if (action === 'fake') {
+      if (!can.fake) return pushActionNotice('Not enough energy to fake move.');
+      setFlow({ kind: 'fakeMove', target: null });
+    } else {
+      setFlow({ kind: 'rest' });
+    }
   };
-  const handleSelectAttackType = (type: AttackType) => setFlow({ kind: 'attackSelect', type });
+  const handleSelectAttackType = (type: AttackType) => {
+    if (flow.kind !== 'attackSelect') return;
+    try {
+      const base = flow.path.length ? movePlayer(state, viewerId, flow.path) : state;
+      const p = base.players[viewerId];
+      if (type === 'punch' && p.energy < PUNCH_ENERGY_COST) return pushActionNotice('Not enough energy to punch.');
+      if (type === 'shoot' && p.ammo < SHOOT_AMMO_COST) return pushActionNotice('Not enough ammo to shoot.');
+      if (type === 'bomb' && p.ammo < BOMB_AMMO_COST) return pushActionNotice('Not enough ammo to bomb.');
+      setFlow({ kind: 'attackSelect', path: flow.path, type });
+    } catch {
+      pushActionNotice('Not enough energy to reposition.');
+    }
+  };
   const handleNext = () => {
-    if (flow.kind === 'attackSelect' && flow.type) setFlow({ kind: 'attackMove', type: flow.type, path: [] });
-    else if (flow.kind === 'attackMove') setFlow({ kind: 'attackTarget', type: flow.type, path: flow.path, target: null });
+    if (flow.kind === 'attackReposition') setFlow({ kind: 'attackSelect', path: flow.path, type: null });
+    else if (flow.kind === 'attackSelect' && flow.type) setFlow({ kind: 'attackTarget', type: flow.type, path: flow.path, target: null });
   };
   const handleBack = () => {
-    if (flow.kind === 'attackTarget') setFlow({ kind: 'attackMove', type: flow.type, path: flow.path });
-    else if (flow.kind === 'attackMove') setFlow({ kind: 'attackSelect', type: flow.type });
+    if (flow.kind === 'attackTarget') setFlow({ kind: 'attackSelect', type: flow.type, path: flow.path });
+    else if (flow.kind === 'attackSelect') setFlow({ kind: 'attackReposition', path: flow.path });
     else setFlow({ kind: 'menu' });
   };
   const handleCancel = () => setFlow({ kind: 'menu' });
 
   // Hypothetical energy/ammo if the pending (unconfirmed) action were confirmed.
   // Computed by running the engine on a clone and reading the actor's resources.
-  // Also doubles as the affordability check for attackTarget: if the engine attack
-  // throws on the post-reposition state, the action isn't actually confirmable yet
-  // (e.g. still not enough ammo/energy even after the chosen reposition).
   let preview: ResourcePreview | null = null;
-  let attackConfirmable = false;
   if (interactive) {
     const res = (s: GameState): ResourcePreview => ({
       energy: s.players[viewerId].energy,
@@ -513,7 +669,7 @@ function App() {
         preview = res(movePlayer(state, viewerId, flow.path));
       } else if (flow.kind === 'rest') {
         preview = res(restPlayer(state, viewerId));
-      } else if (flow.kind === 'attackMove' && flow.path.length) {
+      } else if ((flow.kind === 'attackReposition' || flow.kind === 'attackSelect') && flow.path.length) {
         preview = res(movePlayer(state, viewerId, flow.path));
       } else if (flow.kind === 'attackTarget') {
         const base = flow.path.length ? movePlayer(state, viewerId, flow.path) : state;
@@ -526,7 +682,6 @@ function App() {
             : flow.type === 'shoot' ? shoot(base, viewerId, { x: t.x - from.x, y: t.y - from.y })
             : bomb(base, viewerId, t);
           preview = res(result.state);
-          attackConfirmable = true;
         }
       } else if (flow.kind === 'fakeMove' && flow.target) {
         preview = res(
@@ -535,14 +690,17 @@ function App() {
       }
     } catch {
       preview = null;
-      attackConfirmable = false;
     }
   }
 
+  // Gates the Confirm button's actual `disabled` attribute — reserved for genuinely
+  // incomplete steps (no path/target picked yet). Insufficient resources are no
+  // longer a hard block: Confirm stays clickable and handleConfirm shows a "not
+  // enough X" toast instead, same as the other resource-gated buttons.
   const confirmEnabled =
     (flow.kind === 'move' && flow.path.length >= 1) ||
     (flow.kind === 'fakeMove' && flow.target !== null) ||
-    (flow.kind === 'attackTarget' && flow.target !== null && attackConfirmable) ||
+    (flow.kind === 'attackTarget' && flow.target !== null) ||
     flow.kind === 'rest';
 
   const card: React.CSSProperties = {
@@ -553,6 +711,59 @@ function App() {
   };
   const boardWidth = GRID_SIZE * cellSize + 12;
   const columnWidth = Math.max(boardWidth, 320);
+
+  // Ephemeral sliding toast stack — fixed to the top of the viewport so it renders
+  // consistently across every phase/screen. Newest notice is prepended, so it
+  // appears at the top and pushes earlier ones down, like a real notification feed.
+  const noticeStack = (
+    <div
+      style={{
+        position: 'fixed',
+        top: 16,
+        left: '50%',
+        transform: 'translateX(-50%)',
+        zIndex: 100,
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 8,
+        alignItems: 'center',
+        pointerEvents: 'none',
+      }}
+    >
+      {actionNotices.map((n) => (
+        <div
+          key={n.id}
+          style={{
+            height: 54,
+            boxSizing: 'border-box',
+            padding: '0 26px',
+            borderRadius: 14,
+            fontSize: 16,
+            fontWeight: 700,
+            letterSpacing: 0.2,
+            color: '#fff',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 10,
+            background:
+              n.kind === 'kill'
+                ? 'linear-gradient(135deg, #f39c12, #e67e22)'
+                : 'linear-gradient(135deg, #e74c3c, #c0392b)',
+            border: '1px solid rgba(255,255,255,0.22)',
+            boxShadow: '0 10px 26px rgba(0,0,0,0.45)',
+            textShadow: '0 1px 2px rgba(0,0,0,0.35)',
+            // Fade+slide in on mount; fade+slide out once flagged `leaving`.
+            animation: n.leaving ? 'toastOut 0.34s ease forwards' : 'toastIn 0.34s ease',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          <span aria-hidden style={{ fontSize: 18 }}>{n.kind === 'kill' ? '💀' : '⚠️'}</span>
+          {n.text}
+        </div>
+      ))}
+    </div>
+  );
 
   // ---- Handoff screen: nothing about anyone is shown except the public leaderboard ----
   if (phase === 'handoff') {
@@ -570,6 +781,7 @@ function App() {
           boxSizing: 'border-box',
         }}
       >
+        {noticeStack}
         <div style={{ textAlign: 'center' }}>
           <div style={{ color: theme.textMuted, fontSize: 14, marginBottom: 6 }}>Pass the device — make sure the other player looks away.</div>
           <h1 style={{ fontSize: 44, display: 'flex', alignItems: 'center', gap: 14, justifyContent: 'center' }}>
@@ -689,6 +901,7 @@ function App() {
 
   return (
     <div style={{ minHeight: '100vh', padding: 24, boxSizing: 'border-box' }}>
+      {noticeStack}
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, marginBottom: 20, flexWrap: 'wrap' }}>
         <h1 style={{ fontSize: 26 }}>Scavengers</h1>
         <span style={{ color: theme.textMuted, fontSize: 13 }}>
@@ -746,13 +959,14 @@ function App() {
 
           <div style={{ position: 'relative' }}>
             <Board
-              state={display}
+              state={boardState}
               viewerId={viewerId}
               cellPixelSize={cellSize}
               highlights={interactive ? dedupedHighlights : []}
               onTileClick={interactive ? handleTileClick : undefined}
               redTints={redTints}
               deathAnims={deathAnims}
+              previewTints={interactive ? previewHitTiles : []}
             />
           </div>
 
@@ -773,6 +987,7 @@ function App() {
                 onConfirm={handleConfirm}
                 onBack={handleBack}
                 onCancel={handleCancel}
+                width={columnWidth}
               />
             )}
           </div>
