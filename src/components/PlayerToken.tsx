@@ -16,9 +16,19 @@ interface PlayerTokenProps {
   hideReal?: boolean;
   // Present while this player is being killed/respawned; drives the fade-out/fade-in choreography.
   death?: DeathAnimInfo | null;
+  // When true, this token's phantom (fake) marker pulses to signal it's about to be
+  // cleared — shown to the owner while they're setting up an attack.
+  phantomPulsing?: boolean;
 }
 
-function tokenStyle(x: number, y: number, cellPixelSize: number, color: string, opacity: number): React.CSSProperties {
+function tokenStyle(
+  x: number,
+  y: number,
+  cellPixelSize: number,
+  color: string,
+  opacity: number,
+  immune = false
+): React.CSSProperties {
   return {
     position: 'absolute',
     left: x * cellPixelSize + cellPixelSize * 0.1,
@@ -29,14 +39,21 @@ function tokenStyle(x: number, y: number, cellPixelSize: number, color: string, 
     backgroundColor: color,
     opacity,
     pointerEvents: 'none',
-    boxShadow: '0 1px 3px rgba(0,0,0,0.4)',
+    // Immune players get a pulsing cyan halo so both they and would-be attackers can
+    // see the attack won't land.
+    boxShadow: immune
+      ? '0 0 0 3px rgba(120,230,255,0.95), 0 0 10px 3px rgba(120,230,255,0.7), 0 1px 3px rgba(0,0,0,0.4)'
+      : '0 1px 3px rgba(0,0,0,0.4)',
+    animation: immune ? 'immunePulse 1s ease-in-out infinite' : undefined,
     transition: 'left 0.3s ease, top 0.3s ease',
     zIndex: 5,
   };
 }
 
-export function PlayerToken({ player, cellPixelSize, hideReal = false, death = null }: PlayerTokenProps) {
+export function PlayerToken({ player, cellPixelSize, hideReal = false, death = null, phantomPulsing = false }: PlayerTokenProps) {
   if (!player.alive) return null;
+  const immune = player.immuneTurns > 0;
+  const phantomAnim = phantomPulsing ? 'phantomVanishPulse 0.8s ease-in-out infinite' : undefined;
 
   // A player mid-death/respawn is rendered at a fixed spot (death or respawn corner)
   // with a fade keyframe instead of the normal token, overriding phantom rendering too.
@@ -65,11 +82,14 @@ export function PlayerToken({ player, cellPixelSize, hideReal = false, death = n
       <>
         <div
           data-testid={`token-${player.id}-real`}
-          style={tokenStyle(player.position.x, player.position.y, cellPixelSize, player.color, 0.35)}
+          style={tokenStyle(player.position.x, player.position.y, cellPixelSize, player.color, 0.35, immune)}
         />
         <div
           data-testid={`token-${player.id}-phantom`}
-          style={tokenStyle(player.phantomDisplayPosition.x, player.phantomDisplayPosition.y, cellPixelSize, player.color, 1)}
+          style={{
+            ...tokenStyle(player.phantomDisplayPosition.x, player.phantomDisplayPosition.y, cellPixelSize, player.color, 1),
+            ...(phantomAnim ? { animation: phantomAnim } : {}),
+          }}
         />
       </>
     );
@@ -78,7 +98,7 @@ export function PlayerToken({ player, cellPixelSize, hideReal = false, death = n
   return (
     <div
       data-testid={`token-${player.id}`}
-      style={tokenStyle(player.position.x, player.position.y, cellPixelSize, player.color, 1)}
+      style={tokenStyle(player.position.x, player.position.y, cellPixelSize, player.color, 1, immune)}
     />
   );
 }

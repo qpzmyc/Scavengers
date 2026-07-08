@@ -74,10 +74,10 @@ button:disabled {
 @keyframes redTintPulseLoop {
   0%,
   100% {
-    opacity: 0.15;
+    opacity: 0.2;
   }
   50% {
-    opacity: 0.85;
+    opacity: 1;
   }
 }
 
@@ -112,6 +112,31 @@ button:disabled {
   to {
     opacity: 0;
     transform: translateY(-14px) scale(0.9);
+  }
+}
+
+/* Immune players: gentle halo pulse. */
+@keyframes immunePulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 2px rgba(120, 230, 255, 0.6), 0 0 6px 2px rgba(120, 230, 255, 0.4),
+      0 1px 3px rgba(0, 0, 0, 0.4);
+  }
+  50% {
+    box-shadow: 0 0 0 4px rgba(120, 230, 255, 1), 0 0 14px 5px rgba(120, 230, 255, 0.85),
+      0 1px 3px rgba(0, 0, 0, 0.4);
+  }
+}
+
+/* A phantom about to be cleared by an attack: pulse its opacity so it reads as
+   "about to disappear." */
+@keyframes phantomVanishPulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0;
   }
 }
 

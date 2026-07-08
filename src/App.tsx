@@ -42,7 +42,7 @@ const DEATH_OUT_MS = 900; // hold time for the death fade-out frame
 const DEATH_IN_MS = 1100; // hold time for the death fade-in (respawn) frame
 const TINT_FADE_MS = 160; // per-tile fade-in duration (must match Board's redTintOn animation)
 const TINT_STEP = 95; // per-tile stagger: tiles light up one after another, fast, and STAY lit
-const TINT_HOLD_MS = 300; // dwell with every tile lit before they all clear together
+const TINT_HOLD_MS = 2300; // dwell with every tile lit before they all clear together
 
 type Phase = 'playing' | 'result' | 'handoff' | 'replaying';
 
@@ -164,7 +164,7 @@ function App() {
   // Used for "not enough X to Y" warnings and kill/extra-turn announcements. Each
   // entry auto-dismisses on its own timer, and spamming the trigger just stacks
   // more toasts (newest on top), like a real notification feed.
-  const [actionNotices, setActionNotices] = useState<{ id: number; text: string; kind: 'warning' | 'kill'; leaving?: boolean }[]>([]);
+  const [actionNotices, setActionNotices] = useState<{ id: number; text: string; kind: 'warning' | 'kill' | 'immune'; leaving?: boolean }[]>([]);
   const actionNoticeIdRef = useRef(0);
 
   // Death/respawn choreography for all victims of an attack: each fades out at its
@@ -192,7 +192,7 @@ function App() {
     timersRef.current = [];
   };
 
-  const pushActionNotice = (text: string, kind: 'warning' | 'kill' = 'warning') => {
+  const pushActionNotice = (text: string, kind: 'warning' | 'kill' | 'immune' = 'warning') => {
     const id = actionNoticeIdRef.current++;
     setActionNotices((list) => [{ id, text, kind }, ...list]);
     // Two-stage dismissal: flip to `leaving` (plays the fade-out keyframe), then
@@ -263,7 +263,8 @@ function App() {
       const remainingEnergy = simulateEnergyAfterPath(state.board, me.energy, flow.path);
       if (flow.path.length < 2 && remainingEnergy >= 1) {
         for (const p of neighbors(state.board, cursor)) {
-          if (eq(p, me.position)) continue;
+          // Note: the player's own starting tile IS allowed here (once they've stepped
+          // away), so a two-step move can loop back to where it began.
           if (others.some((o) => eq(p, o.position))) continue;
           if (flow.path.some((s) => eq(s, p))) continue;
           highlights.push({ x: p.x, y: p.y, kind: 'candidate' });
@@ -319,11 +320,21 @@ function App() {
     flow.path.length
   ) {
     const previewPos = flow.path[flow.path.length - 1];
+    const me = display.players[viewerId];
+    // A phantom follows the player by its accumulated offset (mirrors movePlayer),
+    // so the decoy shifts along with the previewed destination too.
+    let phantomDisplayPosition = me.phantomDisplayPosition;
+    if (me.isPhantom && phantomDisplayPosition) {
+      const dx = previewPos.x - me.position.x;
+      const dy = previewPos.y - me.position.y;
+      const clamp = (v: number) => Math.max(0, Math.min(GRID_SIZE - 1, v));
+      phantomDisplayPosition = { x: clamp(phantomDisplayPosition.x + dx), y: clamp(phantomDisplayPosition.y + dy) };
+    }
     boardState = {
       ...display,
       players: {
         ...display.players,
-        [viewerId]: { ...display.players[viewerId], position: previewPos },
+        [viewerId]: { ...me, position: previewPos, phantomDisplayPosition },
       },
     };
   }
@@ -505,8 +516,8 @@ function App() {
         const from = flow.path.length ? flow.path[flow.path.length - 1] : me.position;
         const result =
           flow.type === 'punch' ? punch(base, actorId, t)
-          : flow.type === 'shoot' ? shoot(base, actorId, { x: t.x - from.x, y: t.y - from.y })
-          : bomb(base, actorId, t);
+            : flow.type === 'shoot' ? shoot(base, actorId, { x: t.x - from.x, y: t.y - from.y })
+              : bomb(base, actorId, t);
         const acted = resolveAttack(result, actorId);
         const gotKill = result.killedPlayerIds.length > 0;
         const next = endTurn(acted, actorId, gotKill);
@@ -566,6 +577,23 @@ function App() {
         }, 0);
         const killNoticeDelayMs = preRippleMs + victimTintDelay + TINT_FADE_MS;
 
+        // Enemies standing on a hit tile who survived only because they're immune:
+        // announce it (delayed until the ripple lights their square, like the kill toast).
+        const hitKeys = new Set(hitTiles.map((p) => `${p.x},${p.y}`));
+        const immuneHits = base.turnOrder
+          .filter((id) => id !== actorId)
+          .map((id) => base.players[id])
+          .filter((p) => p.alive && !p.eliminated && p.immuneTurns > 0 && hitKeys.has(`${p.position.x},${p.position.y}`));
+        if (immuneHits.length) {
+          const names = immuneHits.map((p) => p.color.toUpperCase());
+          const immuneMsg = `${names.join(', ')} ${immuneHits.length > 1 ? 'are' : 'is'} immune — no damage!`;
+          const immuneTintDelay = immuneHits.reduce((m, p) => {
+            const tile = tints.find((ti) => ti.x === p.position.x && ti.y === p.position.y);
+            return Math.max(m, tile ? tile.delayMs : 0);
+          }, 0);
+          schedule(preRippleMs + immuneTintDelay + TINT_FADE_MS, () => pushActionNotice(immuneMsg, 'immune'));
+        }
+
         applyResult(acted, next, !gotKill, frames, victims, killNoticeDelayMs);
       }
     } catch (err) {
@@ -581,12 +609,12 @@ function App() {
           flow.type === 'punch'
             ? 'Not enough energy to punch.'
             : flow.type === 'shoot'
-            ? me.ammo < SHOOT_AMMO_COST
-              ? 'Not enough ammo to shoot.'
-              : 'Not enough energy to shoot.'
-            : me.ammo < BOMB_AMMO_COST
-            ? 'Not enough ammo to bomb.'
-            : 'Not enough energy to bomb.';
+              ? me.ammo < SHOOT_AMMO_COST
+                ? 'Not enough ammo to shoot.'
+                : 'Not enough energy to shoot.'
+              : me.ammo < BOMB_AMMO_COST
+                ? 'Not enough ammo to bomb.'
+                : 'Not enough energy to bomb.';
       }
       pushActionNotice(message);
     }
@@ -679,8 +707,8 @@ function App() {
           const t = flow.target;
           const result =
             flow.type === 'punch' ? punch(base, viewerId, t)
-            : flow.type === 'shoot' ? shoot(base, viewerId, { x: t.x - from.x, y: t.y - from.y })
-            : bomb(base, viewerId, t);
+              : flow.type === 'shoot' ? shoot(base, viewerId, { x: t.x - from.x, y: t.y - from.y })
+                : bomb(base, viewerId, t);
           preview = res(result.state);
         }
       } else if (flow.kind === 'fakeMove' && flow.target) {
@@ -749,6 +777,8 @@ function App() {
             background:
               n.kind === 'kill'
                 ? 'linear-gradient(135deg, #f39c12, #e67e22)'
+                : n.kind === 'immune'
+                ? 'linear-gradient(135deg, #3498db, #2470a5)'
                 : 'linear-gradient(135deg, #e74c3c, #c0392b)',
             border: '1px solid rgba(255,255,255,0.22)',
             boxShadow: '0 10px 26px rgba(0,0,0,0.45)',
@@ -758,7 +788,7 @@ function App() {
             whiteSpace: 'nowrap',
           }}
         >
-          <span aria-hidden style={{ fontSize: 18 }}>{n.kind === 'kill' ? '💀' : '⚠️'}</span>
+          <span aria-hidden style={{ fontSize: 18 }}>{n.kind === 'kill' ? '💀' : n.kind === 'immune' ? '🛡️' : '⚠️'}</span>
           {n.text}
         </div>
       ))}
@@ -967,6 +997,10 @@ function App() {
               redTints={redTints}
               deathAnims={deathAnims}
               previewTints={interactive ? previewHitTiles : []}
+              attackPreparing={
+                interactive &&
+                (flow.kind === 'attackReposition' || flow.kind === 'attackSelect' || flow.kind === 'attackTarget')
+              }
             />
           </div>
 

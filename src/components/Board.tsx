@@ -1,5 +1,5 @@
 import type { GameState, Position, PlayerId, PlayerState } from '../engine';
-import { GRID_SIZE, VISION_RADIUS } from '../engine';
+import { GRID_SIZE, visionRadiusForCount } from '../engine';
 import { theme, SPAWN_TINT } from '../theme';
 import { PlayerToken } from './PlayerToken';
 
@@ -40,6 +40,9 @@ interface BoardProps {
   // Tiles a pending (unconfirmed) attack would hit — flashed on a continuous loop
   // to preview the shot, as opposed to `redTints`' one-shot post-confirm ripple.
   previewTints?: Position[];
+  // True while the viewer is setting up an attack: their own phantom pulses to show
+  // it's about to vanish (attacking clears the phantom).
+  attackPreparing?: boolean;
 }
 
 const HIGHLIGHT_STYLES: Record<HighlightKind, { background: string; border: string }> = {
@@ -100,6 +103,7 @@ export function Board({
   redTints = [],
   deathAnims = [],
   previewTints = [],
+  attackPreparing = false,
 }: BoardProps) {
   const highlightMap = new Map<string, HighlightKind>();
   for (const h of highlights) highlightMap.set(`${h.x},${h.y}`, h.kind);
@@ -107,12 +111,14 @@ export function Board({
   const viewerPos = state.players[viewerId].position;
   // Circular (Euclidean) vision. Tiles are "seen" if their center is within the
   // vision radius; the +0.5 keeps a tile whose center just crosses the edge lit.
-  const canSee = (pos: Position) => euclid(viewerPos, pos) <= VISION_RADIUS + 0.5;
+  // The radius depends on the player count (4-player games see less).
+  const visionRadius = visionRadiusForCount(state.turnOrder.length);
+  const canSee = (pos: Position) => euclid(viewerPos, pos) <= visionRadius + 0.5;
 
   // Center of the viewer's tile, in board-pixel space (matching the +6 tile inset).
   const viewCx = 6 + (viewerPos.x + 0.5) * cellPixelSize;
   const viewCy = 6 + (viewerPos.y + 0.5) * cellPixelSize;
-  const visRadiusPx = (VISION_RADIUS + 0.5) * cellPixelSize;
+  const visRadiusPx = (visionRadius + 0.5) * cellPixelSize;
 
   const renderToken = (id: PlayerId) => {
     const p = state.players[id];
@@ -120,7 +126,16 @@ export function Board({
     const isViewer = id === viewerId;
     if (!isViewer && !canSee(perceivedPos(p, false))) return null; // enemy out of vision
     const death = deathAnims.find((d) => d.playerId === id) ?? null;
-    return <PlayerToken key={id} player={p} cellPixelSize={cellPixelSize} hideReal={!isViewer} death={death} />;
+    return (
+      <PlayerToken
+        key={id}
+        player={p}
+        cellPixelSize={cellPixelSize}
+        hideReal={!isViewer}
+        death={death}
+        phantomPulsing={isViewer && attackPreparing}
+      />
+    );
   };
 
   return (
@@ -196,7 +211,9 @@ export function Board({
             top: t.y * cellPixelSize + 6,
             width: cellPixelSize,
             height: cellPixelSize,
-            background: 'rgba(231, 76, 60, 0.82)',
+            // Caps at 50% opacity (redTintOn fades to opacity:1) so it reads as a
+            // tint over the tile rather than a solid red square.
+            background: 'rgba(231, 76, 60, 0.5)',
             opacity: 0,
             pointerEvents: 'none',
             zIndex: 6,
@@ -217,6 +234,7 @@ export function Board({
             top: t.y * cellPixelSize + 6,
             width: cellPixelSize,
             height: cellPixelSize,
+            // Pulses between faint and 50% (redTintPulseLoop peaks at opacity:1).
             background: 'rgba(231, 76, 60, 0.5)',
             pointerEvents: 'none',
             zIndex: 6,
