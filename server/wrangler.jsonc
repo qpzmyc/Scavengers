@@ -1,0 +1,15 @@
+{
+  "name": "scavengers",
+  "main": "src/server.ts",
+  "compatibility_date": "2026-07-09",
+  "durable_objects": {
+    "bindings": [
+      { "name": "ScavengersServer", "class_name": "ScavengersServer" },
+      { "name": "LobbyServer", "class_name": "LobbyServer" }
+    ]
+  },
+  "migrations": [
+    { "tag": "v1", "new_sqlite_classes": ["ScavengersServer"] },
+    { "tag": "v2", "new_sqlite_classes": ["LobbyServer"] }
+  ]
+}
