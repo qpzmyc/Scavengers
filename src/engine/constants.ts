@@ -25,7 +25,7 @@ export const AMMO_PICKUP_COUNT = 3;
 export const PICKUP_RESPAWN_PLIES = 4;
 
 export const RESPAWN_IMMUNITY_TURNS = 2;
-export const VISION_RADIUS = 8; // 2-player games
+export const VISION_RADIUS = 7; // 2-player games
 export const VISION_RADIUS_4P = 5; // 4-player games get a tighter view (the board is more crowded)
 
 // Vision radius for a game with `playerCount` players.

@@ -44,9 +44,9 @@ export function Leaderboard({ state }: LeaderboardProps) {
         <thead>
           <tr>
             <th style={{ ...th, textAlign: 'left' }}>Player</th>
-            <th style={th}>Kills</th>
-            <th style={th}>Deaths</th>
-            <th style={th}>Streak</th>
+            <th style={th}>Kills (+5)</th>
+            <th style={th}>Deaths (-3)</th>
+            <th style={th}>Streak (+1)</th>
             {showScore && <th style={th}>Score</th>}
           </tr>
         </thead>
@@ -65,7 +65,7 @@ export function Leaderboard({ state }: LeaderboardProps) {
           ))}
         </tbody>
       </table>
-      <div style={{ marginTop: 8, fontSize: 11, color: theme.textMuted }}>Streak = longest alive kill streak</div>
+      <div style={{ marginTop: 8, fontSize: 11, color: theme.textMuted }}>Streak = most consecutive turns alive</div>
     </div>
   );
 }

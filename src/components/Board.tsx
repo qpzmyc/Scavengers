@@ -225,7 +225,7 @@ export function Board({
             zIndex: 6,
             // Fade in (staggered by delayMs) and hold lit; the whole set is cleared
             // together when the animation frame ends. Duration matches TINT_FADE_MS.
-            animation: 'redTintOn 0.16s ease-out',
+            animation: 'redTintOn 0.17s ease-out',
             animationDelay: `${t.delayMs}ms`,
             animationFillMode: 'forwards',
           }}

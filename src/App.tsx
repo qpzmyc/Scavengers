@@ -34,15 +34,15 @@ import { Lives } from './components/Lives';
 import { ControlPanel, type Flow, type AttackType, type Capabilities } from './components/ControlPanel';
 import { theme } from './theme';
 
-const RESULT_MS = 1900; // how long the acting player sees their outcome (energy/ammo) before handoff
-const REPLAY_START_MS = 900; // pause before the replay begins, so the board can register
-const REPLAY_END_MS = 900; // pause after the replay finishes, before control is handed over
+const RESULT_MS = 1200; // how long the acting player sees their outcome (energy/ammo) before handoff
+const REPLAY_START_MS = 300; // pause before the replay begins, so the board can register
+const REPLAY_END_MS = 300; // pause after the replay finishes, before control is handed over
 const MOVE_STEP_MS = 550; // hold time for an intermediate step of a 2-tile move
-const DEATH_OUT_MS = 900; // hold time for the death fade-out frame
-const DEATH_IN_MS = 1100; // hold time for the death fade-in (respawn) frame
-const TINT_FADE_MS = 160; // per-tile fade-in duration (must match Board's redTintOn animation)
-const TINT_STEP = 95; // per-tile stagger: tiles light up one after another, fast, and STAY lit
-const TINT_HOLD_MS = 2300; // dwell with every tile lit before they all clear together
+const DEATH_OUT_MS = 1100; // hold time for the death fade-out frame
+const DEATH_IN_MS = 600; // hold time for the death fade-in (respawn) frame
+const TINT_FADE_MS = 170; // per-tile fade-in duration (must match Board's redTintOn animation)
+const TINT_STEP = 110; // per-tile stagger: tiles light up one after another, fast, and STAY lit
+const TINT_HOLD_MS = 1400; // dwell with every tile lit before they all clear together
 
 type Phase = 'playing' | 'result' | 'handoff' | 'replaying';
 
@@ -330,8 +330,8 @@ function App() {
           ? rayTiles(from)
           : flow.type === 'punch'
             ? // Punch may target any in-bounds adjacent tile, walls included (you can
-              // punch into a wall) — just not off the map.
-              DIRS8.map((d) => ({ x: from.x + d.x, y: from.y + d.y })).filter(isInBounds)
+            // punch into a wall) — just not off the map.
+            DIRS8.map((d) => ({ x: from.x + d.x, y: from.y + d.y })).filter(isInBounds)
             : neighbors(state.board, from);
       for (const p of candidates) highlights.push({ x: p.x, y: p.y, kind: 'candidate' });
       if (flow.target) highlights.push({ x: flow.target.x, y: flow.target.y, kind: 'selected' });
@@ -586,7 +586,7 @@ function App() {
           const next = endTurn(moved, actorId, false);
           const frames: AnimFrame[] = [
             ...walkFrames,
-            plainFrame(moved, Math.max(MOVE_STEP_MS, RESULT_MS - MOVE_STEP_MS * flow.path.length)),
+            plainFrame(moved, RESULT_MS),
           ];
           applyResult(moved, next, true, frames);
         }
@@ -892,10 +892,10 @@ function App() {
               n.kind === 'kill'
                 ? 'linear-gradient(135deg, #f39c12, #e67e22)'
                 : n.kind === 'immune'
-                ? 'linear-gradient(135deg, #3498db, #2470a5)'
-                : n.kind === 'phantom'
-                ? 'linear-gradient(135deg, #9b59b6, #6c3483)'
-                : 'linear-gradient(135deg, #e74c3c, #c0392b)',
+                  ? 'linear-gradient(135deg, #3498db, #2470a5)'
+                  : n.kind === 'phantom'
+                    ? 'linear-gradient(135deg, #9b59b6, #6c3483)'
+                    : 'linear-gradient(135deg, #e74c3c, #c0392b)',
             border: '1px solid rgba(255,255,255,0.22)',
             boxShadow: '0 10px 26px rgba(0,0,0,0.45)',
             textShadow: '0 1px 2px rgba(0,0,0,0.35)',
