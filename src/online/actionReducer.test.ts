@@ -81,4 +81,25 @@ describe('applyAction', () => {
     const res = applyAction(state, 'p1', { kind: 'attack', type: 'punch', path: [], target: { x: 9, y: 9 } });
     expect(res.ok).toBe(false);
   });
+
+  it('crushing an enemy phantom on the move path grants NO extra turn (turn passes)', () => {
+    let state = createInitialGameState('deathmatch', 2); // currentTurn p1
+    state = withPlayerAt(state, 'p1', { x: 5, y: 5 });
+    state = withEmptyTile(state, { x: 6, y: 5 });
+    // p2 is a phantom whose REAL tile sits on p1's move path (6,5).
+    state = withPlayerAt(state, 'p2', { x: 6, y: 5 });
+    state = {
+      ...state,
+      players: {
+        ...state.players,
+        p2: { ...state.players.p2, isPhantom: true, phantomDisplayPosition: { x: 9, y: 9 } },
+      },
+    };
+    const res = applyAction(state, 'p1', { kind: 'move', path: [{ x: 6, y: 5 }] });
+    expect(res.ok).toBe(true);
+    if (res.ok) {
+      expect(res.event.killedPlayerIds).toContain('p2');
+      expect(res.state.currentTurn).toBe('p2'); // crush = no extra turn, turn passes
+    }
+  });
 });
