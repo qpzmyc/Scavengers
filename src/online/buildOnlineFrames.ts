@@ -45,6 +45,10 @@ function respawnFrame(after: GameState, victims: Victim[]): AnimFrame[] {
 }
 
 // Turn an authoritative (before -> after) transition into the live animation frames.
+// PRECONDITION: `before` MUST be exactly the state immediately prior to `event`
+// (the frame the viewer currently shows). The move steps and ripple origin are
+// re-derived from `before` via movePlayer/computeHitTiles, so a stale `before`
+// yields wrong intermediate frames — only the terminal `after` frame is authoritative.
 export function buildOnlineFrames(before: GameState, after: GameState, event: ActionEvent): AnimFrame[] {
   const req = event.request;
   const actorId = event.actorId;
