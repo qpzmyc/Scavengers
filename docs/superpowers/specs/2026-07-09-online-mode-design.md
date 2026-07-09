@@ -28,9 +28,16 @@ vision) as they happen.
   engine for every action; it never trusts a client's computed result.
 - **Transport:** full `GameState` broadcast (plain JSON — already serializable)
   plus a small `ActionEvent` describing what happened; clients fog locally.
-- **Rooms:** each room is a PartyKit party keyed by room id. Private room id =
-  the 6-char code (no registry needed). Public rooms additionally register with a
-  singleton `lobby` party so the Join list is real.
+- **Rooms:** each room is a `partyserver` Durable Object instance keyed by room
+  id. Private room id = the 6-char code (no registry needed). Public rooms
+  additionally register with a singleton `lobby` Durable Object so the Join list
+  is real.
+- **Framework:** the server uses `partyserver` (Cloudflare Workers + Durable
+  Objects, run locally via `wrangler dev`), and the client uses `partysocket`.
+  This replaces the earlier hosted-PartyKit assumption; the API differs
+  (`Server` subclass, `onMessage(conn, msg)`, `this.broadcast(msg, exclude)`),
+  and config lives in `server/wrangler.jsonc` as Durable Object bindings +
+  migrations, not `partykit.json`.
 - **Start rule:** host-only; enabled only when the room is full (2/2 or 4/4).
 - **Disconnect:** pause the game and show a "waiting to reconnect" overlay;
   rejoining the same room/slot resumes; the host can end the match.
@@ -92,7 +99,8 @@ hotseat contract (move/rest/fakeMove or attack → `resolveAttack` → `endTurn`
 including the phantom-crush case from `App.tsx`). Returns the new state and the
 `ActionEvent`.
 
-**`server/src/roomServer.ts`** (the room `Party.Server`, replaces the echo stub):
+**`server/src/roomServer.ts`** (the room `partyserver` `Server` subclass,
+replaces the echo stub in `server/src/server.ts`):
 holds `phase`, roster (connectionId → slot + host flag), `mode`, `playerCount`,
 and `GameState`. Message handling:
 - `onConnect`: send current `roster`.
@@ -116,8 +124,9 @@ Maintains an in-memory map of open public rooms. Handles `register`,
 `unregister`, heartbeat-on-`register` refresh, and `list` → `rooms`. Rooms that
 start or empty out are removed.
 
-`server/partykit.json` gains the `parties` mapping so both `roomServer`
-(default `main`) and `lobbyServer` are addressable.
+`server/wrangler.jsonc` gains Durable Object bindings + migrations for both the
+room server class and the lobby server class; `routePartykitRequest(request, env)`
+routes `/parties/:party/:room` to the matching Durable Object namespace.
 
 ### Client
 
