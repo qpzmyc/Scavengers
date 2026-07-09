@@ -28,13 +28,13 @@ export interface ActionEvent {
 
 // ---- Room party messages ----
 export type ClientMsg =
-  | { type: 'join' }
+  | { type: 'join'; token?: string }
   | { type: 'startGame' }
   | { type: 'action'; request: ActionRequest }
   | { type: 'endMatch' };
 
 export type ServerMsg =
-  | { type: 'assigned'; playerId: PlayerId }
+  | { type: 'assigned'; playerId: PlayerId; token: string }
   | { type: 'roster'; entries: RosterEntry[]; phase: RoomPhase; mode: GameMode; playerCount: number }
   | { type: 'gameStart'; state: GameState }
   | { type: 'state'; state: GameState; event: ActionEvent }
