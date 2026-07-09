@@ -32,6 +32,6 @@ export const theme = {
 export const SPAWN_TINT: Record<string, string> = {
   green: 'rgba(46, 204, 113, 0.22)',
   red: 'rgba(231, 76, 60, 0.22)',
-  blue: 'rgba(52, 152, 219, 0.22)',
+  blue: 'rgba(52, 152, 219, 0.42)',
   yellow: 'rgba(241, 196, 15, 0.24)',
 };

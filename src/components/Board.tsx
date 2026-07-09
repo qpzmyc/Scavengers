@@ -43,6 +43,9 @@ interface BoardProps {
   // True while the viewer is setting up an attack: their own phantom pulses to show
   // it's about to vanish (attacking clears the phantom).
   attackPreparing?: boolean;
+  // Overrides where vision (fog) is centered. Used so an unconfirmed move preview
+  // moves the token but NOT the fog — you can't scout by pretending to move.
+  visionCenter?: Position;
 }
 
 const HIGHLIGHT_STYLES: Record<HighlightKind, { background: string; border: string }> = {
@@ -104,11 +107,14 @@ export function Board({
   deathAnims = [],
   previewTints = [],
   attackPreparing = false,
+  visionCenter,
 }: BoardProps) {
   const highlightMap = new Map<string, HighlightKind>();
   for (const h of highlights) highlightMap.set(`${h.x},${h.y}`, h.kind);
   const spawnTints = buildSpawnTints(state);
-  const viewerPos = state.players[viewerId].position;
+  // Vision follows visionCenter when provided (keeps fog fixed during an unconfirmed
+  // move preview); otherwise it tracks the viewer's shown position.
+  const viewerPos = visionCenter ?? state.players[viewerId].position;
   // Circular (Euclidean) vision. Tiles are "seen" if their center is within the
   // vision radius; the +0.5 keeps a tile whose center just crosses the edge lit.
   // The radius depends on the player count (4-player games see less).

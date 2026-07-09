@@ -182,10 +182,12 @@ describe('bomb', () => {
     expect(result.state.players.p1.ammo).toBe(0);
   });
 
-  it('throws if attacker has no energy', () => {
+  it('costs no energy — works with zero energy', () => {
     let state = createInitialGameState('lastStanding');
     state = withPositions(state, { x: 0, y: 0 }, { x: 4, y: 0 });
     state = { ...state, players: { ...state.players, p1: { ...state.players.p1, ammo: BOMB_AMMO_COST, energy: 0 } } };
-    expect(() => bomb(state, 'p1', { x: 5, y: 0 })).toThrow();
+    const result = bomb(state, 'p1', { x: 5, y: 0 });
+    expect(result.killedPlayerIds).toEqual(['p2']);
+    expect(result.state.players.p1.energy).toBe(0);
   });
 });

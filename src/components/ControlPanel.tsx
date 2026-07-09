@@ -1,7 +1,53 @@
 import type { Position } from '../engine';
+import {
+  PHANTOM_ENERGY_COST,
+  REST_ENERGY_GAIN,
+  PUNCH_ENERGY_COST,
+  ATTACK_ENERGY_COST,
+  SHOOT_AMMO_COST,
+  BOMB_AMMO_COST,
+} from '../engine';
 import { theme } from '../theme';
 
 export type AttackType = 'punch' | 'shoot' | 'bomb';
+
+// A small cost line under a button's label: a signed number (sometimes omitted when
+// the amount is variable) followed by a colored dot — yellow = energy, orange = ammo.
+type CostKind = 'energy' | 'ammo';
+interface CostItem {
+  sign: '+' | '-';
+  amount?: number;
+  kind: CostKind;
+}
+const DOT_COLOR: Record<CostKind, string> = { energy: theme.energy, ammo: theme.ammo };
+
+function CostBadge({ items }: { items: CostItem[] }) {
+  return (
+    <span style={{ display: 'flex', gap: 9, alignItems: 'center', marginTop: 4, fontSize: 11, fontWeight: 700 }}>
+      {items.map((it, i) => (
+        <span key={i} style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+          <span>{it.sign}{it.amount ?? ''}</span>
+          <span style={{ width: 8, height: 8, borderRadius: '50%', background: DOT_COLOR[it.kind], display: 'inline-block' }} />
+        </span>
+      ))}
+    </span>
+  );
+}
+
+// Cost hints shown on each action / weapon button (see CostBadge). Move and Attack
+// omit numbers because their cost varies (by tiles / by weapon).
+const COST: Record<string, CostItem[]> = {
+  move: [{ sign: '-', kind: 'energy' }],
+  attack: [{ sign: '-', kind: 'energy' }, { sign: '-', kind: 'ammo' }],
+  fake: [{ sign: '-', amount: PHANTOM_ENERGY_COST, kind: 'energy' }],
+  rest: [{ sign: '+', amount: REST_ENERGY_GAIN, kind: 'energy' }],
+  punch: [{ sign: '-', amount: PUNCH_ENERGY_COST, kind: 'energy' }],
+  shoot: [{ sign: '-', amount: ATTACK_ENERGY_COST, kind: 'energy' }, { sign: '-', amount: SHOOT_AMMO_COST, kind: 'ammo' }],
+  bomb: [{ sign: '-', amount: BOMB_AMMO_COST, kind: 'ammo' }],
+};
+
+// Column layout so a button can stack its label above its cost badge.
+const costCol: React.CSSProperties = { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0, lineHeight: 1.1 };
 
 export type Flow =
   | { kind: 'menu' }
@@ -96,7 +142,7 @@ function btn(variant: Variant, disabled: boolean, active = false): React.CSSProp
 }
 
 const wrap: React.CSSProperties = { padding: 16 };
-const title: React.CSSProperties = { fontWeight: 600, marginBottom: 4, color: theme.heading };
+const title: React.CSSProperties = { fontWeight: 800, fontSize: 20, letterSpacing: 0.2, marginBottom: 6, color: theme.heading };
 const hint: React.CSSProperties = { margin: '4px 0 12px', color: theme.textMuted, fontSize: 13 };
 
 export function ControlPanel({
@@ -124,10 +170,10 @@ export function ControlPanel({
         <div style={row()}>
           {/* Never HTML-disabled: clicking while unaffordable is handled by the
               caller, which shows a "not enough X" toast instead of doing nothing. */}
-          <button style={sizedBtn('secondary', !can.move, false, width)} onClick={() => onSelectAction('move')}>Move</button>
-          <button style={sizedBtn('secondary', !can.attack, false, width)} onClick={() => onSelectAction('attack')}>Attack</button>
-          <button style={sizedBtn('secondary', !can.fake, false, width)} onClick={() => onSelectAction('fake')}>Fake Move</button>
-          <button style={sizedBtn('secondary', false, false, width)} onClick={() => onSelectAction('rest')}>Rest</button>
+          <button style={{ ...sizedBtn('secondary', !can.move, false, width), ...costCol }} onClick={() => onSelectAction('move')}><span>Move</span><CostBadge items={COST.move} /></button>
+          <button style={{ ...sizedBtn('secondary', !can.attack, false, width), ...costCol }} onClick={() => onSelectAction('attack')}><span>Attack</span><CostBadge items={COST.attack} /></button>
+          <button style={{ ...sizedBtn('secondary', !can.fake, false, width), ...costCol }} onClick={() => onSelectAction('fake')}><span>Fake Move</span><CostBadge items={COST.fake} /></button>
+          <button style={{ ...sizedBtn('secondary', false, false, width), ...costCol }} onClick={() => onSelectAction('rest')}><span>Rest</span><CostBadge items={COST.rest} /></button>
         </div>
         {noEnergyNote && <div style={hint}>Out of energy — only Rest is available this turn.</div>}
       </div>
@@ -151,7 +197,7 @@ export function ControlPanel({
     return (
       <div style={wrap} data-testid="control-panel">
         <div style={title}>Rest</div>
-        <div style={hint}>Recover +2 energy (up to the max). You forfeit moving or attacking this turn.</div>
+        <div style={hint}>Recover +{REST_ENERGY_GAIN} energy (up to the max). You forfeit moving or attacking this turn.</div>
         <div style={row()}>
           <button style={sizedBtn('secondary', false, false, width)} onClick={onCancel}>Cancel</button>
           <button style={sizedBtn('primary', false, false, width)} onClick={onConfirm}>Confirm</button>
@@ -195,9 +241,9 @@ export function ControlPanel({
         <div style={row()}>
           {/* Always the same (non-greyed) style, regardless of affordability — the
               toast notification is the feedback mechanism now, not a dimmed button. */}
-          <button style={sizedBtn('toggle', false, flow.type === 'punch', width)} onClick={() => onSelectAttackType('punch')}>Punch</button>
-          <button style={sizedBtn('toggle', false, flow.type === 'shoot', width)} onClick={() => onSelectAttackType('shoot')}>Shoot</button>
-          <button style={sizedBtn('toggle', false, flow.type === 'bomb', width)} onClick={() => onSelectAttackType('bomb')}>Bomb</button>
+          <button style={{ ...sizedBtn('toggle', false, flow.type === 'punch', width), ...costCol }} onClick={() => onSelectAttackType('punch')}><span>Punch</span><CostBadge items={COST.punch} /></button>
+          <button style={{ ...sizedBtn('toggle', false, flow.type === 'shoot', width), ...costCol }} onClick={() => onSelectAttackType('shoot')}><span>Shoot</span><CostBadge items={COST.shoot} /></button>
+          <button style={{ ...sizedBtn('toggle', false, flow.type === 'bomb', width), ...costCol }} onClick={() => onSelectAttackType('bomb')}><span>Bomb</span><CostBadge items={COST.bomb} /></button>
         </div>
         <div style={row()}>
           <button style={sizedBtn('secondary', false, false, width)} onClick={onBack}>Back</button>

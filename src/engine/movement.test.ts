@@ -152,14 +152,24 @@ describe('movePlayer', () => {
 });
 
 describe('restPlayer', () => {
-  it('grants +2 energy capped at max', () => {
+  it('grants +3 energy', () => {
     const state = createInitialGameState('lastStanding');
     const depleted = {
       ...state,
       players: { ...state.players, p1: { ...state.players.p1, energy: 1 } },
     };
     const next = restPlayer(depleted, 'p1');
-    expect(next.players.p1.energy).toBe(3);
+    expect(next.players.p1.energy).toBe(4);
+  });
+
+  it('caps energy at MAX_ENERGY', () => {
+    const state = createInitialGameState('lastStanding');
+    const nearFull = {
+      ...state,
+      players: { ...state.players, p1: { ...state.players.p1, energy: MAX_ENERGY - 1 } },
+    };
+    const next = restPlayer(nearFull, 'p1');
+    expect(next.players.p1.energy).toBe(MAX_ENERGY);
   });
 
   it('does not exceed max energy', () => {

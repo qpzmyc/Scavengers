@@ -157,12 +157,9 @@ export function bomb(state: GameState, attackerId: PlayerId, targetPos: Position
   if (!isOnStraightLine(attacker.position, targetPos)) {
     throw new Error('Bomb target must be on a straight line (incl. diagonal) from the attacker');
   }
-  if (attacker.energy < ATTACK_ENERGY_COST) {
-    throw new Error('Not enough energy to attack');
-  }
 
+  // A bomb costs only ammo — no energy (any reposition step before it is charged separately).
   let next = clearPhantom(state, attackerId);
-  next = spendAttackEnergy(next, attackerId);
   next = {
     ...next,
     players: {

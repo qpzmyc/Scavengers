@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { type ReactNode, useEffect, useRef, useState } from 'react';
 import {
   type GameState,
   type GameMode,
@@ -56,6 +56,19 @@ interface AnimFrame {
   redTints: RedTint[];
   death: DeathAnim[];
   holdMs: number;
+  // Which player's turn produced this frame (used to label replays by color).
+  actorId?: PlayerId;
+}
+
+// Renders a message, tinting any word that names a player color with that color.
+function renderColoredText(text: string, colorSet: Set<string>): ReactNode[] {
+  return text.split(/([A-Za-z]+)/).map((tok, i) =>
+    colorSet.has(tok.toLowerCase()) ? (
+      <span key={i} style={{ color: tok.toLowerCase(), fontWeight: 800, textShadow: '0 1px 2px rgba(0,0,0,0.55)' }}>{tok}</span>
+    ) : (
+      <span key={i}>{tok}</span>
+    )
+  );
 }
 
 const plainFrame = (display: GameState, holdMs: number): AnimFrame => ({ display, redTints: [], death: [], holdMs });
@@ -151,6 +164,10 @@ function App() {
   const [display, setDisplay] = useState<GameState>(state);
   const [phase, setPhase] = useState<Phase>('playing');
   const [flow, setFlow] = useState<Flow>({ kind: 'menu' });
+  // Which player's turn is currently being animated during a replay, so the
+  // "Replaying ___'s turn" banner can update one player at a time instead of
+  // naming every replayed player at once.
+  const [replayActorId, setReplayActorId] = useState<PlayerId | null>(null);
   const cellSize = useCellSize();
 
   // Persistent, stacked kill notifications shown top-right of the screen. Never
@@ -164,7 +181,7 @@ function App() {
   // Used for "not enough X to Y" warnings and kill/extra-turn announcements. Each
   // entry auto-dismisses on its own timer, and spamming the trigger just stacks
   // more toasts (newest on top), like a real notification feed.
-  const [actionNotices, setActionNotices] = useState<{ id: number; text: string; kind: 'warning' | 'kill' | 'immune'; leaving?: boolean }[]>([]);
+  const [actionNotices, setActionNotices] = useState<{ id: number; text: string; kind: 'warning' | 'kill' | 'immune' | 'phantom'; leaving?: boolean }[]>([]);
   const actionNoticeIdRef = useRef(0);
 
   // Death/respawn choreography for all victims of an attack: each fades out at its
@@ -192,12 +209,13 @@ function App() {
     timersRef.current = [];
   };
 
-  const pushActionNotice = (text: string, kind: 'warning' | 'kill' | 'immune' = 'warning') => {
+  const pushActionNotice = (text: string, kind: 'warning' | 'kill' | 'immune' | 'phantom' = 'warning') => {
     const id = actionNoticeIdRef.current++;
     setActionNotices((list) => [{ id, text, kind }, ...list]);
     // Two-stage dismissal: flip to `leaving` (plays the fade-out keyframe), then
-    // remove from the DOM once that animation has finished.
-    schedule(2600, () => {
+    // remove from the DOM once that animation has finished. Long dwell so there's
+    // time to read them.
+    schedule(4800, () => {
       setActionNotices((list) => list.map((n) => (n.id === id ? { ...n, leaving: true } : n)));
       schedule(360, () => {
         setActionNotices((list) => list.filter((n) => n.id !== id));
@@ -210,6 +228,8 @@ function App() {
   const me = state.players[viewerId];
   const others = state.turnOrder.filter((id) => id !== viewerId).map((id) => state.players[id]);
   const interactive = phase === 'playing' && !gameOver;
+  // Lowercased set of every player's color name, for tinting color words in messages.
+  const colorSet = new Set(state.turnOrder.map((id) => state.players[id].color.toLowerCase()));
 
   const startGame = (nextMode: GameMode, count: number) => {
     clearTimers();
@@ -218,7 +238,9 @@ function App() {
     setPlayerCount(count);
     setState(s);
     setDisplay(s);
-    setPhase('playing');
+    // Open with the same handoff screen every turn uses, so the very first player
+    // gets a "P1's turn — Start turn" gate too (nothing to replay yet).
+    setPhase('handoff');
     setFlow({ kind: 'menu' });
     setRedTints([]);
     setDeathAnims([]);
@@ -242,12 +264,16 @@ function App() {
     setScreen('menu');
   };
 
+  const canPunch = me.energy >= PUNCH_ENERGY_COST;
+  const canShoot = me.ammo >= SHOOT_AMMO_COST && me.energy >= ATTACK_ENERGY_COST;
+  const canBomb = me.ammo >= BOMB_AMMO_COST; // bomb costs only ammo now
   const can: Capabilities = {
     move: me.energy >= MOVE_ENERGY_COST_PER_TILE,
-    punch: me.energy >= PUNCH_ENERGY_COST,
-    shoot: me.ammo >= SHOOT_AMMO_COST && me.energy >= ATTACK_ENERGY_COST,
-    bomb: me.ammo >= BOMB_AMMO_COST && me.energy >= ATTACK_ENERGY_COST,
-    attack: me.energy >= ATTACK_ENERGY_COST,
+    punch: canPunch,
+    shoot: canShoot,
+    bomb: canBomb,
+    // Can enter the attack flow if any single weapon is usable.
+    attack: canPunch || canShoot || canBomb,
     fake: me.energy >= PHANTOM_ENERGY_COST,
   };
 
@@ -265,7 +291,10 @@ function App() {
         for (const p of neighbors(state.board, cursor)) {
           // Note: the player's own starting tile IS allowed here (once they've stepped
           // away), so a two-step move can loop back to where it began.
-          if (others.some((o) => eq(p, o.position))) continue;
+          // Block the position each other player APPEARS to occupy (a phantom's fake
+          // tile, or a normal player's real tile). A phantom's true tile is NOT blocked
+          // — it looks empty, and stepping onto it crushes them (handled on confirm).
+          if (others.some((o) => eq(p, o.isPhantom && o.phantomDisplayPosition ? o.phantomDisplayPosition : o.position))) continue;
           if (flow.path.some((s) => eq(s, p))) continue;
           highlights.push({ x: p.x, y: p.y, kind: 'candidate' });
         }
@@ -285,7 +314,10 @@ function App() {
       if (flow.path.length < ATTACK_MAX_REPOSITION && remainingEnergy >= MOVE_ENERGY_COST_PER_TILE) {
         for (const p of neighbors(state.board, cursor)) {
           if (eq(p, me.position)) continue;
-          if (others.some((o) => eq(p, o.position))) continue;
+          // Block the position each other player APPEARS to occupy (a phantom's fake
+          // tile, or a normal player's real tile). A phantom's true tile is NOT blocked
+          // — it looks empty, and stepping onto it crushes them (handled on confirm).
+          if (others.some((o) => eq(p, o.isPhantom && o.phantomDisplayPosition ? o.phantomDisplayPosition : o.position))) continue;
           if (flow.path.some((s) => eq(s, p))) continue;
           highlights.push({ x: p.x, y: p.y, kind: 'candidate' });
         }
@@ -293,7 +325,14 @@ function App() {
       flow.path.forEach((p) => highlights.push({ x: p.x, y: p.y, kind: 'selected' }));
     } else if (flow.kind === 'attackTarget') {
       const from = flow.path.length ? flow.path[flow.path.length - 1] : me.position;
-      const candidates = flow.type === 'bomb' ? rayTiles(from) : neighbors(state.board, from);
+      const candidates =
+        flow.type === 'bomb'
+          ? rayTiles(from)
+          : flow.type === 'punch'
+            ? // Punch may target any in-bounds adjacent tile, walls included (you can
+              // punch into a wall) — just not off the map.
+              DIRS8.map((d) => ({ x: from.x + d.x, y: from.y + d.y })).filter(isInBounds)
+            : neighbors(state.board, from);
       for (const p of candidates) highlights.push({ x: p.x, y: p.y, kind: 'candidate' });
       if (flow.target) highlights.push({ x: flow.target.x, y: flow.target.y, kind: 'selected' });
     }
@@ -360,7 +399,7 @@ function App() {
 
   // Plays an AnimFrame[] sequence through the shared display/redTints/deathAnim state,
   // holding each frame for its holdMs before advancing, then calls onDone.
-  const playFrames = (frames: AnimFrame[], onDone: () => void) => {
+  const playFrames = (frames: AnimFrame[], onDone: () => void, onFrame?: (f: AnimFrame) => void) => {
     if (frames.length === 0) {
       onDone();
       return;
@@ -371,6 +410,7 @@ function App() {
       setDisplay(f.display);
       setRedTints(f.redTints);
       setDeathAnims(f.death);
+      onFrame?.(f);
       i += 1;
       if (i < frames.length) {
         schedule(f.holdMs, step);
@@ -395,7 +435,8 @@ function App() {
     killNoticeDelayMs = 0
   ) => {
     const actorId = state.currentTurn;
-    actorLogRef.current.push(...frames);
+    // Tag every frame with the acting player so replays can name whose turn they show.
+    actorLogRef.current.push(...frames.map((f) => ({ ...f, actorId })));
     setState(acted); // actor is still currentTurn here, so their bars show the updated resources
     setFlow({ kind: 'menu' });
     setPhase('result');
@@ -417,14 +458,26 @@ function App() {
         return [...list, ...additions];
       });
 
-      // One combined toast covers double/triple kills too, instead of one per victim.
-      const victimNames = victims.map((v) => acted.players[v.victimId].color.toUpperCase());
-      const killMsg =
-        next.winner === null
-          ? `Killed ${victimNames.join(', ')} — +1 extra turn!`
-          : `Killed ${victimNames.join(', ')}!`;
+      // Victims of the same attack type are combined into one toast; different
+      // attack types (e.g. a bomb catching one player and a punch catching another)
+      // get their own separate toasts instead of being mashed into one line.
+      const victimsByVerb = new Map<string, typeof victims>();
+      for (const v of victims) {
+        const group = victimsByVerb.get(v.verb) ?? [];
+        group.push(v);
+        victimsByVerb.set(v.verb, group);
+      }
       // Delay so the toast appears only once the ripple has lit the victim's square.
-      schedule(killNoticeDelayMs, () => pushActionNotice(killMsg, 'kill'));
+      schedule(killNoticeDelayMs, () => {
+        for (const [verb, group] of victimsByVerb) {
+          const victimNames = group.map((v) => acted.players[v.victimId].color.toUpperCase());
+          const killMsg =
+            next.winner === null && verb !== 'crushed'
+              ? `${verb[0].toUpperCase()}${verb.slice(1)} ${victimNames.join(', ')} — +1 extra turn!`
+              : `${verb[0].toUpperCase()}${verb.slice(1)} ${victimNames.join(', ')}!`;
+          pushActionNotice(killMsg, 'kill');
+        }
+      });
     }
 
     playFrames(frames, () => {
@@ -488,20 +541,55 @@ function App() {
     setRedTints([]);
     try {
       if (flow.kind === 'move') {
-        const acted = movePlayer(state, actorId, flow.path);
-        const next = endTurn(acted, actorId, false);
-        // Snap back to the real starting tile first (the live preview while building
-        // the path already showed the destination), then step through the path so the
-        // whole movement plays out instead of jumping straight there.
-        const frames: AnimFrame[] = [plainFrame(state, MOVE_STEP_MS)];
+        const moved = movePlayer(state, actorId, flow.path);
+        // A phantom whose REAL tile the mover stepped onto gets crushed (the mover
+        // can't see the hidden real position, so this is a lucky/guessed kill).
+        const pathKeys = new Set(flow.path.map((p) => `${p.x},${p.y}`));
+        const squashedIds = state.turnOrder.filter((id) => {
+          if (id === actorId) return false;
+          const o = state.players[id];
+          return o.alive && !o.eliminated && o.isPhantom && pathKeys.has(`${o.position.x},${o.position.y}`);
+        });
+
+        // Snap back to the real starting tile first (the live preview already showed the
+        // destination), then step through the path so the whole walk plays out.
+        const walkFrames: AnimFrame[] = [plainFrame(state, MOVE_STEP_MS)];
         if (flow.path.length === 2) {
-          const mid = movePlayer(state, actorId, [flow.path[0]]);
-          frames.push(plainFrame(mid, MOVE_STEP_MS));
-          frames.push(plainFrame(acted, Math.max(MOVE_STEP_MS, RESULT_MS - 2 * MOVE_STEP_MS)));
-        } else {
-          frames.push(plainFrame(acted, Math.max(MOVE_STEP_MS, RESULT_MS - MOVE_STEP_MS)));
+          walkFrames.push(plainFrame(movePlayer(state, actorId, [flow.path[0]]), MOVE_STEP_MS));
         }
-        applyResult(acted, next, true, frames);
+
+        if (squashedIds.length) {
+          let killedState = moved;
+          for (const id of squashedIds) {
+            killedState = { ...killedState, players: { ...killedState.players, [id]: { ...killedState.players[id], alive: false } } };
+          }
+          const acted = resolveAttack({ state: killedState, killedPlayerIds: squashedIds }, actorId);
+          const next = endTurn(acted, actorId, false); // a crush is a lucky/incidental kill → no extra turn
+          const victims = squashedIds.map((id) => ({
+            victimId: id,
+            deathPos: state.players[id].position,
+            respawnPos: acted.players[id].eliminated ? null : acted.players[id].position,
+            verb: 'crushed',
+          }));
+          const frames: AnimFrame[] = [
+            ...walkFrames,
+            {
+              display: acted,
+              redTints: [],
+              death: victims.map((v) => ({ playerId: v.victimId, deathPos: v.deathPos, respawnPos: v.respawnPos, stage: 'out' as const })),
+              holdMs: Math.max(MOVE_STEP_MS, DEATH_OUT_MS),
+            },
+            ...buildRespawnFrames(acted, victims),
+          ];
+          applyResult(acted, next, true, frames, victims, MOVE_STEP_MS * flow.path.length);
+        } else {
+          const next = endTurn(moved, actorId, false);
+          const frames: AnimFrame[] = [
+            ...walkFrames,
+            plainFrame(moved, Math.max(MOVE_STEP_MS, RESULT_MS - MOVE_STEP_MS * flow.path.length)),
+          ];
+          applyResult(moved, next, true, frames);
+        }
       } else if (flow.kind === 'rest') {
         const acted = restPlayer(state, actorId);
         applyResult(acted, endTurn(acted, actorId, false), true, [plainFrame(acted, RESULT_MS)]);
@@ -594,6 +682,24 @@ function App() {
           schedule(preRippleMs + immuneTintDelay + TINT_FADE_MS, () => pushActionNotice(immuneMsg, 'immune'));
         }
 
+        // Enemies whose PHANTOM (decoy) was hit but who survived (their real position
+        // wasn't caught): the shot only tagged the decoy.
+        const killedSet = new Set(result.killedPlayerIds);
+        const phantomHits = base.turnOrder
+          .filter((id) => id !== actorId && !killedSet.has(id))
+          .map((id) => base.players[id])
+          .filter((p) => p.alive && !p.eliminated && p.isPhantom && p.phantomDisplayPosition
+            && hitKeys.has(`${p.phantomDisplayPosition.x},${p.phantomDisplayPosition.y}`));
+        if (phantomHits.length) {
+          const names = phantomHits.map((p) => p.color.toUpperCase());
+          const phantomMsg = `Only hit ${names.join(', ')}'s phantom — no one there!`;
+          const phantomTintDelay = phantomHits.reduce((m, p) => {
+            const tile = tints.find((ti) => ti.x === p.phantomDisplayPosition!.x && ti.y === p.phantomDisplayPosition!.y);
+            return Math.max(m, tile ? tile.delayMs : 0);
+          }, 0);
+          schedule(preRippleMs + phantomTintDelay + TINT_FADE_MS, () => pushActionNotice(phantomMsg, 'phantom'));
+        }
+
         applyResult(acted, next, !gotKill, frames, victims, killNoticeDelayMs);
       }
     } catch (err) {
@@ -628,21 +734,29 @@ function App() {
     setDisplay(baseline.display);
     setRedTints([]);
     setDeathAnims([]);
+    setReplayActorId(rest.find((f) => f.actorId)?.actorId ?? baseline.actorId ?? null);
     setPhase('replaying');
     schedule(REPLAY_START_MS, () => {
-      playFrames(rest, () => {
-        // Let the final frame settle before handing control to the current player.
-        // (turnStartRef/pendingLogRef for this player were already advanced to `next`
-        // the moment their turn ended, in applyResult — not here.)
-        schedule(REPLAY_END_MS, () => {
-          setDisplay(state);
-          setRedTints([]);
-          setDeathAnims([]);
-          replayRef.current = [];
-          setFlow({ kind: 'menu' });
-          setPhase('playing');
-        });
-      });
+      playFrames(
+        rest,
+        () => {
+          // Let the final frame settle before handing control to the current player.
+          // (turnStartRef/pendingLogRef for this player were already advanced to `next`
+          // the moment their turn ended, in applyResult — not here.)
+          schedule(REPLAY_END_MS, () => {
+            setDisplay(state);
+            setRedTints([]);
+            setDeathAnims([]);
+            replayRef.current = [];
+            setReplayActorId(null);
+            setFlow({ kind: 'menu' });
+            setPhase('playing');
+          });
+        },
+        (f) => {
+          if (f.actorId) setReplayActorId(f.actorId);
+        }
+      );
     });
   };
 
@@ -651,7 +765,7 @@ function App() {
       if (!can.move) return pushActionNotice('Not enough energy to move.');
       setFlow({ kind: 'move', path: [] });
     } else if (action === 'attack') {
-      if (!can.attack) return pushActionNotice('Not enough energy to attack.');
+      if (!can.attack) return pushActionNotice('Not enough energy or ammo to attack.');
       setFlow({ kind: 'attackReposition', path: [] });
     } else if (action === 'fake') {
       if (!can.fake) return pushActionNotice('Not enough energy to fake move.');
@@ -779,6 +893,8 @@ function App() {
                 ? 'linear-gradient(135deg, #f39c12, #e67e22)'
                 : n.kind === 'immune'
                 ? 'linear-gradient(135deg, #3498db, #2470a5)'
+                : n.kind === 'phantom'
+                ? 'linear-gradient(135deg, #9b59b6, #6c3483)'
                 : 'linear-gradient(135deg, #e74c3c, #c0392b)',
             border: '1px solid rgba(255,255,255,0.22)',
             boxShadow: '0 10px 26px rgba(0,0,0,0.45)',
@@ -788,8 +904,8 @@ function App() {
             whiteSpace: 'nowrap',
           }}
         >
-          <span aria-hidden style={{ fontSize: 18 }}>{n.kind === 'kill' ? '💀' : n.kind === 'immune' ? '🛡️' : '⚠️'}</span>
-          {n.text}
+          <span aria-hidden style={{ fontSize: 18 }}>{n.kind === 'kill' ? '💀' : n.kind === 'immune' ? '🛡️' : n.kind === 'phantom' ? '👻' : '⚠️'}</span>
+          <span>{renderColoredText(n.text, colorSet)}</span>
         </div>
       ))}
     </div>
@@ -981,7 +1097,11 @@ function App() {
             </div>
           ) : phase === 'replaying' ? (
             <div style={{ width: columnWidth, boxSizing: 'border-box', padding: '12px 16px', borderRadius: theme.radius, background: theme.surface, border: `1px solid ${theme.border}`, color: theme.textMuted, textAlign: 'center' }}>
-              Replaying the opponent's turn…
+              {(() => {
+                if (!replayActorId) return 'Replaying…';
+                const label = state.players[replayActorId].color.toUpperCase();
+                return <>Replaying {renderColoredText(label, colorSet)}'s turn…</>;
+              })()}
             </div>
           ) : (
             <ResourceBars player={barsPlayer} width={columnWidth} preview={preview} />
@@ -1001,6 +1121,9 @@ function App() {
                 interactive &&
                 (flow.kind === 'attackReposition' || flow.kind === 'attackSelect' || flow.kind === 'attackTarget')
               }
+              // Keep the fog on the real position while previewing an unconfirmed move,
+              // so a player can't "scout" by hovering a move they won't commit.
+              visionCenter={interactive ? me.position : undefined}
             />
           </div>
 

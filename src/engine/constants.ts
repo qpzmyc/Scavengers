@@ -9,7 +9,7 @@ export const START_AMMO = 1;
 
 export const MOVE_ENERGY_COST_PER_TILE = 1;
 export const MAX_MOVE_TILES = 2;
-export const REST_ENERGY_GAIN = 2;
+export const REST_ENERGY_GAIN = 3;
 export const ENERGY_PICKUP_VALUE = 5;
 
 export const PHANTOM_ENERGY_COST = 2;
