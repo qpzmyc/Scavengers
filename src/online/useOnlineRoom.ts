@@ -1,5 +1,6 @@
 import { useCallback, useRef, useState } from 'react';
 import usePartySocket from 'partysocket/react';
+import type { PartySocket } from 'partysocket';
 import type { GameState, GameMode, PlayerId } from '../engine';
 import type { ClientMsg, ServerMsg, RoomPhase, RosterEntry, ActionEvent } from './protocol';
 import { PARTY_HOST, ROOM_PARTY } from './config';
@@ -35,9 +36,9 @@ export function useOnlineRoom(roomId: string, create?: { mode: GameMode; count: 
     party: ROOM_PARTY,
     room: roomId,
     query: create ? { mode: create.mode, count: String(create.count) } : {},
-    onOpen() {
+    onOpen(event: Event) {
       setConnected(true);
-      socketRef.current?.send(JSON.stringify({ type: 'join' } satisfies ClientMsg));
+      (event.target as PartySocket).send(JSON.stringify({ type: 'join' } satisfies ClientMsg));
     },
     onClose() {
       setConnected(false);

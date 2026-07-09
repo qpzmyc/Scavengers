@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import usePartySocket from 'partysocket/react';
+import type { PartySocket } from 'partysocket';
 import type { LobbyRow, LobbyClientMsg, LobbyServerMsg } from './protocol';
 import { PARTY_HOST, LOBBY_PARTY, LOBBY_ROOM } from './config';
 
@@ -10,8 +11,8 @@ export function useLobby(): { rooms: LobbyRow[]; refresh: () => void } {
     host: PARTY_HOST,
     party: LOBBY_PARTY,
     room: LOBBY_ROOM,
-    onOpen() {
-      socketRef.current?.send(JSON.stringify({ type: 'list' } satisfies LobbyClientMsg));
+    onOpen(event: Event) {
+      (event.target as PartySocket).send(JSON.stringify({ type: 'list' } satisfies LobbyClientMsg));
     },
     onMessage(evt: MessageEvent) {
       let msg: LobbyServerMsg;
