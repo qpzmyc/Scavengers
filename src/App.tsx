@@ -32,6 +32,7 @@ import { ResourceBars, type ResourcePreview } from './components/ResourceBars';
 import { Leaderboard } from './components/Leaderboard';
 import { Lives } from './components/Lives';
 import { ControlPanel, type Flow, type AttackType, type Capabilities } from './components/ControlPanel';
+import { MenuFlow } from './components/menu/MenuFlow';
 import { theme } from './theme';
 
 const RESULT_MS = 1200; // how long the acting player sees their outcome (energy/ammo) before handoff
@@ -158,8 +159,6 @@ function useCellSize(): number {
 function App() {
   const [screen, setScreen] = useState<'menu' | 'game'>('menu');
   const [mode, setMode] = useState<GameMode>('lastStanding');
-  const [playerCount, setPlayerCount] = useState<number>(2);
-  const [connectivity, setConnectivity] = useState<'local'>('local');
   const [state, setState] = useState<GameState>(() => createInitialGameState('lastStanding', 2));
   const [display, setDisplay] = useState<GameState>(state);
   const [phase, setPhase] = useState<Phase>('playing');
@@ -235,7 +234,6 @@ function App() {
     clearTimers();
     const s = createInitialGameState(nextMode, count);
     setMode(nextMode);
-    setPlayerCount(count);
     setState(s);
     setDisplay(s);
     // Open with the same handoff screen every turn uses, so the very first player
@@ -957,89 +955,15 @@ function App() {
     );
   }
 
-  // ---- Main menu screen ----
+  // ---- Menu (game-type → settings → online lobby) ----
   if (screen === 'menu') {
-    const rowLabel: React.CSSProperties = { fontSize: 13, color: theme.textMuted, marginBottom: 8, fontWeight: 600 };
-    const toggleBtn = (active: boolean, disabled: boolean): React.CSSProperties => ({
-      padding: '10px 18px',
-      margin: '0 8px 0 0',
-      fontSize: 14,
-      fontWeight: 500,
-      borderRadius: 8,
-      cursor: disabled ? 'not-allowed' : 'pointer',
-      background: disabled ? theme.surfaceAlt : active ? theme.accentSoft : theme.surface,
-      border: `1px solid ${disabled ? theme.border : active ? theme.accent : theme.border}`,
-      color: disabled ? theme.textMuted : active ? theme.accentText : theme.text,
-      opacity: disabled ? 0.6 : 1,
-    });
     return (
-      <div
-        style={{
-          minHeight: '100vh',
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          justifyContent: 'center',
-          gap: 28,
-          padding: 24,
-          boxSizing: 'border-box',
+      <MenuFlow
+        onStartGame={(nextMode, count) => {
+          startGame(nextMode, count);
+          setScreen('game');
         }}
-      >
-        <h1 style={{ fontSize: 44 }}>Scavengers</h1>
-
-        <div style={{ ...card, padding: 28, display: 'flex', flexDirection: 'column', gap: 22, minWidth: 360 }}>
-          <div>
-            <div style={rowLabel}>Players</div>
-            <div>
-              <button style={toggleBtn(playerCount === 2, false)} onClick={() => setPlayerCount(2)}>2 Players</button>
-              <button style={toggleBtn(playerCount === 4, false)} onClick={() => setPlayerCount(4)}>4 Players</button>
-            </div>
-          </div>
-
-          <div>
-            <div style={rowLabel}>Mode</div>
-            <div>
-              <button style={toggleBtn(mode === 'deathmatch', false)} onClick={() => setMode('deathmatch')}>Deathmatch</button>
-              <button style={toggleBtn(mode === 'lastStanding', false)} onClick={() => setMode('lastStanding')}>Last Player Standing</button>
-            </div>
-          </div>
-
-          <div>
-            <div style={rowLabel}>Opponents</div>
-            <div>
-              <button style={toggleBtn(connectivity === 'local', false)} onClick={() => setConnectivity('local')}>
-                Local (Pass &amp; Play)
-              </button>
-              <button style={toggleBtn(false, true)} disabled title="Coming soon">
-                Online — Coming soon
-              </button>
-              <button style={toggleBtn(false, true)} disabled title="Coming soon">
-                Bots — Coming soon
-              </button>
-            </div>
-          </div>
-        </div>
-
-        <button
-          onClick={() => {
-            startGame(mode, playerCount);
-            setScreen('game');
-          }}
-          style={{
-            marginTop: 8,
-            padding: '16px 40px',
-            fontSize: 18,
-            fontWeight: 700,
-            background: theme.accent,
-            border: `1px solid ${theme.accent}`,
-            color: '#fff',
-            borderRadius: 10,
-            cursor: 'pointer',
-          }}
-        >
-          Start Game
-        </button>
-      </div>
+      />
     );
   }
 
