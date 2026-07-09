@@ -13,7 +13,6 @@ import {
   resolveAttack,
   endTurn,
   isInBounds,
-  isWall,
   GRID_SIZE,
   ATTACK_MAX_REPOSITION,
   PHANTOM_ENERGY_COST,
@@ -24,7 +23,6 @@ import {
   SHOOT_AMMO_COST,
   BOMB_AMMO_COST,
   ATTACK_ENERGY_COST,
-  traceLine,
 } from './engine';
 import type { PlayerId } from './engine';
 import { Board, type Highlight, type RedTint, type DeathAnim } from './components/Board';
@@ -34,32 +32,27 @@ import { Lives } from './components/Lives';
 import { ControlPanel, type Flow, type AttackType, type Capabilities } from './components/ControlPanel';
 import { MenuFlow } from './components/menu/MenuFlow';
 import { theme } from './theme';
+import {
+  type AnimFrame,
+  RESULT_MS,
+  MOVE_STEP_MS,
+  DEATH_OUT_MS,
+  DEATH_IN_MS,
+  TINT_FADE_MS,
+  TINT_STEP,
+  TINT_HOLD_MS,
+  DIRS8,
+  eq,
+  neighbors,
+  rayTiles,
+  computeHitTiles,
+  plainFrame,
+} from './game/animation';
 
-const RESULT_MS = 1200; // how long the acting player sees their outcome (energy/ammo) before handoff
 const REPLAY_START_MS = 300; // pause before the replay begins, so the board can register
 const REPLAY_END_MS = 300; // pause after the replay finishes, before control is handed over
-const MOVE_STEP_MS = 550; // hold time for an intermediate step of a 2-tile move
-const DEATH_OUT_MS = 1100; // hold time for the death fade-out frame
-const DEATH_IN_MS = 600; // hold time for the death fade-in (respawn) frame
-const TINT_FADE_MS = 170; // per-tile fade-in duration (must match Board's redTintOn animation)
-const TINT_STEP = 110; // per-tile stagger: tiles light up one after another, fast, and STAY lit
-const TINT_HOLD_MS = 1400; // dwell with every tile lit before they all clear together
 
 type Phase = 'playing' | 'result' | 'handoff' | 'replaying';
-
-// A single step of an animated sequence: the board/player state to show, the tint
-// overlays and death-fade info active during this step, and how long to hold it
-// before advancing. Live 'result' play and the opponent-turn replay both consume
-// the same AnimFrame[] via `playFrames`, so movement steps tile-by-tile and the
-// attack ripple / death fade appear identically in both.
-interface AnimFrame {
-  display: GameState;
-  redTints: RedTint[];
-  death: DeathAnim[];
-  holdMs: number;
-  // Which player's turn produced this frame (used to label replays by color).
-  actorId?: PlayerId;
-}
 
 // Renders a message, tinting any word that names a player color with that color.
 function renderColoredText(text: string, colorSet: Set<string>): ReactNode[] {
@@ -70,62 +63,6 @@ function renderColoredText(text: string, colorSet: Set<string>): ReactNode[] {
       <span key={i}>{tok}</span>
     )
   );
-}
-
-const plainFrame = (display: GameState, holdMs: number): AnimFrame => ({ display, redTints: [], death: [], holdMs });
-
-const DIRS8: Position[] = [
-  { x: 0, y: -1 }, { x: 1, y: -1 }, { x: 1, y: 0 }, { x: 1, y: 1 },
-  { x: 0, y: 1 }, { x: -1, y: 1 }, { x: -1, y: 0 }, { x: -1, y: -1 },
-];
-
-const eq = (a: Position, b: Position) => a.x === b.x && a.y === b.y;
-
-function neighbors(board: GameState['board'], from: Position): Position[] {
-  return DIRS8.map((d) => ({ x: from.x + d.x, y: from.y + d.y })).filter(
-    (p) => isInBounds(p) && !isWall(board, p)
-  );
-}
-
-function rayTiles(from: Position): Position[] {
-  const tiles: Position[] = [];
-  for (const d of DIRS8) {
-    let c = { x: from.x + d.x, y: from.y + d.y };
-    while (isInBounds(c)) {
-      tiles.push(c);
-      c = { x: c.x + d.x, y: c.y + d.y };
-    }
-  }
-  return tiles;
-}
-
-// The tiles a punch/shoot/bomb would actually hit from `from`, aimed at `target`.
-// Shared by the final one-shot attack ripple and the live "preview the shot"
-// flashing highlight shown while the player is still choosing a target.
-function computeHitTiles(board: GameState['board'], type: AttackType, from: Position, target: Position): Position[] {
-  if (type === 'shoot') {
-    const dir = { x: target.x - from.x, y: target.y - from.y };
-    return traceLine(board, from, dir);
-  }
-  if (type === 'bomb') {
-    const tiles: Position[] = [{ x: target.x, y: target.y }];
-    for (const d of DIRS8) {
-      const p = { x: target.x + d.x, y: target.y + d.y };
-      if (isInBounds(p)) tiles.push(p);
-    }
-    return tiles;
-  }
-  // punch: the targeted ring tile plus its two neighbors in the ring of 8 around
-  // the attack origin — mirrors the engine's 3-tile hit exactly.
-  const ringIdx = DIRS8.findIndex((d) => eq({ x: from.x + d.x, y: from.y + d.y }, target));
-  const idxs = ringIdx === -1 ? [] : [(ringIdx - 1 + 8) % 8, ringIdx, (ringIdx + 1) % 8];
-  const tiles: Position[] = [];
-  for (const k of idxs) {
-    const d = DIRS8[k];
-    const p = { x: from.x + d.x, y: from.y + d.y };
-    if (isInBounds(p)) tiles.push(p);
-  }
-  return tiles;
 }
 
 // Simulates energy remaining after walking `path` from `startEnergy`, subtracting
