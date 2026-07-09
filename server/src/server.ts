@@ -32,7 +32,7 @@ export class ScavengersServer extends Server<Record<string, unknown>> {
   onMessage(conn: Connection, raw: string | ArrayBuffer | ArrayBufferView) {
     const msg = parse<ClientMsg>(raw);
     if (!msg) return;
-    if (msg.type === 'join') this.dispatch({ t: 'join', connId: conn.id });
+    if (msg.type === 'join') this.dispatch({ t: 'join', connId: conn.id, token: msg.token, issueToken: crypto.randomUUID() });
     else if (msg.type === 'startGame') this.dispatch({ t: 'startGame', connId: conn.id });
     else if (msg.type === 'action') this.dispatch({ t: 'action', connId: conn.id, request: msg.request });
     else if (msg.type === 'endMatch') this.dispatch({ t: 'endMatch', connId: conn.id });

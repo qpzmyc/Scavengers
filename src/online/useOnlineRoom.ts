@@ -31,6 +31,8 @@ export function useOnlineRoom(roomId: string, create?: { mode: GameMode; count: 
   const [lastEvent, setLastEvent] = useState<ActionEvent | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  const tokenRef = useRef<string | null>(null);
+
   const socket = usePartySocket({
     host: PARTY_HOST,
     party: ROOM_PARTY,
@@ -38,7 +40,7 @@ export function useOnlineRoom(roomId: string, create?: { mode: GameMode; count: 
     query: create ? { mode: create.mode, count: String(create.count) } : {},
     onOpen(event: Event) {
       setConnected(true);
-      (event.target as PartySocket).send(JSON.stringify({ type: 'join' } satisfies ClientMsg));
+      (event.target as PartySocket).send(JSON.stringify({ type: 'join', token: tokenRef.current ?? undefined } satisfies ClientMsg));
     },
     onClose() {
       setConnected(false);
@@ -53,6 +55,7 @@ export function useOnlineRoom(roomId: string, create?: { mode: GameMode; count: 
       switch (msg.type) {
         case 'assigned':
           setMyPlayerId(msg.playerId);
+          tokenRef.current = msg.token;
           break;
         case 'roster':
           setRoster(msg.entries);
