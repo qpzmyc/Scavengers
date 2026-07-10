@@ -977,6 +977,7 @@ function App() {
   if (route.kind === 'online') {
     return (
       <OnlineSession
+        key={route.roomId}
         roomId={route.roomId}
         create={route.create}
         becomeHost={route.becomeHost}

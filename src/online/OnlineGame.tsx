@@ -1,4 +1,4 @@
-import { type ReactNode, useEffect, useRef, useState } from 'react';
+import { type ReactNode, Fragment, useEffect, useRef, useState } from 'react';
 import {
   type GameState,
   type Position,
@@ -44,17 +44,14 @@ import type { ActionEvent } from './protocol';
 import type { EnterRoomConfig } from '../components/menu/MenuFlow';
 import { generateRoomCode } from './roomCode';
 
-// Renders a message, tinting any word that names a player (by custom name or color) with
-// that player's color.
-function renderColoredText(text: string, nameColorMap: Map<string, string>): ReactNode[] {
-  return text.split(/([A-Za-z]+)/).map((tok, i) => {
-    const color = nameColorMap.get(tok.toLowerCase());
-    return color ? (
-      <span key={i} style={{ color, fontWeight: 800, textShadow: '0 1px 2px rgba(0,0,0,0.55)' }}>{tok}</span>
-    ) : (
-      <span key={i}>{tok}</span>
-    );
-  });
+// A player's name tinted with THAT player's color. Keyed by playerId (not by the text),
+// so duplicate names still each get their own color — the whole point of allowing dupes.
+function colorName(id: PlayerId, text: string, s: GameState): ReactNode {
+  return (
+    <span key={id} style={{ color: s.players[id].color, fontWeight: 800, textShadow: '0 1px 2px rgba(0,0,0,0.55)' }}>
+      {text}
+    </span>
+  );
 }
 
 // Simulates energy remaining after walking `path` from `startEnergy`, subtracting
@@ -110,7 +107,7 @@ export function OnlineGame({
   >([]);
   const notificationIdRef = useRef(0);
 
-  const [actionNotices, setActionNotices] = useState<{ id: number; text: string; kind: 'warning' | 'kill' | 'immune' | 'phantom'; leaving?: boolean }[]>([]);
+  const [actionNotices, setActionNotices] = useState<{ id: number; content: ReactNode; kind: 'warning' | 'kill' | 'immune' | 'phantom'; leaving?: boolean }[]>([]);
   const actionNoticeIdRef = useRef(0);
 
   // Random-first-turn reveal overlay: runs once on mount (which always coincides with a
@@ -124,6 +121,17 @@ export function OnlineGame({
   const [revealing, setRevealing] = useState(true);
   const [highlightId, setHighlightId] = useState<PlayerId | null>(null);
   const [revealLanded, setRevealLanded] = useState(false);
+
+  // Game-start intro: fade the board to black over 5s, then back from black over 3s,
+  // and only then hand off to the first-turn randomizer (gated via `introActive`).
+  const [introActive, setIntroActive] = useState(true);
+  const [introOpacity, setIntroOpacity] = useState(0);
+  useEffect(() => {
+    const t1 = window.setTimeout(() => setIntroOpacity(1), 50);      // begin 5s fade to black
+    const t2 = window.setTimeout(() => setIntroOpacity(0), 5050);    // begin 3s fade back from black
+    const t3 = window.setTimeout(() => setIntroActive(false), 8100); // intro done → start randomizer
+    return () => { window.clearTimeout(t1); window.clearTimeout(t2); window.clearTimeout(t3); };
+  }, []);
 
   // Win sequence: fade to black slowly, then reveal the win screen.
   const winnerId = room.state?.winner ?? null;
@@ -149,6 +157,7 @@ export function OnlineGame({
   }, [room.phase]);
 
   useEffect(() => {
+    if (introActive) return; // wait for the start-of-game fade sequence to finish first
     const initialState = room.state;
     if (!initialState) return;
     const order = initialState.turnOrder;
@@ -172,7 +181,7 @@ export function OnlineGame({
       window.clearTimeout(dismiss);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [introActive]);
 
   const prevStateRef = useRef<GameState | null>(null);
   const processedEventRef = useRef<ActionEvent | null>(null);
@@ -188,9 +197,9 @@ export function OnlineGame({
   };
   useEffect(() => () => clearTimers(), []);
 
-  const pushActionNotice = (text: string, kind: 'warning' | 'kill' | 'immune' | 'phantom' = 'warning') => {
+  const pushActionNotice = (content: ReactNode, kind: 'warning' | 'kill' | 'immune' | 'phantom' = 'warning') => {
     const id = actionNoticeIdRef.current++;
-    setActionNotices((list) => [{ id, text, kind }, ...list]);
+    setActionNotices((list) => [{ id, content, kind }, ...list]);
     schedule(4800, () => {
       setActionNotices((list) => list.map((n) => (n.id === id ? { ...n, leaving: true } : n)));
       schedule(360, () => {
@@ -286,19 +295,18 @@ export function OnlineGame({
           });
 
           const selfKill = event.killedPlayerIds.length === 1 && event.killedPlayerIds[0] === event.actorId;
-          let killMsg: string;
+          const subject = colorName(event.actorId, describe(event.actorId, true), after);
+          let content: ReactNode;
           if (selfKill) {
-            killMsg =
-              event.actorId === room.myPlayerId
-                ? `You ${verb} yourself!`
-                : `${nameFor(event.actorId)} ${verb} themselves!`;
+            content = <>{subject} {verb} themselves!</>;
           } else {
-            const subject = describe(event.actorId, true);
-            const victims = event.killedPlayerIds.map((id) => describe(id, false)).join(', ');
+            const victims = event.killedPlayerIds.map((id, i) => (
+              <Fragment key={id}>{i > 0 ? ', ' : ''}{colorName(id, describe(id, false), after)}</Fragment>
+            ));
             const suffix = after.winner === null && verb !== 'crushed' ? ' — +1 extra turn!' : '!';
-            killMsg = `${subject} ${verb} ${victims}${suffix}`;
+            content = <>{subject} {verb} {victims}{suffix}</>;
           }
-          pushActionNotice(killMsg, 'kill');
+          pushActionNotice(content, 'kill');
         };
         if (deathDelay > 0) schedule(deathDelay, emitKillNotices);
         else emitKillNotices();
@@ -306,11 +314,11 @@ export function OnlineGame({
     }
 
     if (event.phantomHitPlayerIds.length) {
-      const subject = describe(event.actorId, true);
-      const targets = event.phantomHitPlayerIds
-        .map((id) => (id === room.myPlayerId ? 'your' : `${nameFor(id)}'s`))
-        .join(', ');
-      pushActionNotice(`${subject} hit ${targets} Phantom!`, 'phantom');
+      const subject = colorName(event.actorId, describe(event.actorId, true), after);
+      const targets = event.phantomHitPlayerIds.map((id, i) => (
+        <Fragment key={id}>{i > 0 ? ', ' : ''}{colorName(id, id === room.myPlayerId ? 'your' : `${nameFor(id)}'s`, after)}</Fragment>
+      ));
+      pushActionNotice(<>{subject} hit {targets} Phantom!</>, 'phantom');
     }
 
     setAnimating(true);
@@ -405,10 +413,6 @@ export function OnlineGame({
   // `revealing` gates interactivity too: showing the chosen player's action panel during
   // the first-turn reveal would leak who was picked before the animation finishes.
   const interactive = myTurn && !animating && !sending && !revealing && room.phase === 'playing' && state.winner === null;
-  const nameColorMap = new Map<string, string>(
-    state.turnOrder.map((id) => [nameFor(id).toLowerCase(), state.players[id].color] as const)
-  );
-  nameColorMap.set('you', me.color);
 
   const canPunch = me.energy >= PUNCH_ENERGY_COST;
   const canShoot = me.ammo >= SHOOT_AMMO_COST && me.energy >= ATTACK_ENERGY_COST;
@@ -666,7 +670,7 @@ export function OnlineGame({
           }}
         >
           <span aria-hidden style={{ fontSize: 18 }}>{n.kind === 'kill' ? '💀' : n.kind === 'immune' ? '🛡️' : n.kind === 'phantom' ? '👻' : '⚠️'}</span>
-          <span>{renderColoredText(n.text, nameColorMap)}</span>
+          <span>{n.content}</span>
         </div>
       ))}
     </div>
@@ -692,7 +696,7 @@ export function OnlineGame({
           }}
         >
           <div style={{ fontSize: revealLanded ? 24 : 18, color: revealLanded ? theme.heading : theme.textMuted, fontWeight: 700, letterSpacing: 1, transition: 'all 0.2s ease' }}>
-            {revealLanded ? <>{renderColoredText(nameFor(highlightId), nameColorMap)} goes first!</> : 'Choosing first turn…'}
+            {revealLanded ? <>{colorName(highlightId, nameFor(highlightId), state)} goes first!</> : 'Choosing first turn…'}
           </div>
           <div style={{ display: 'flex', gap: 18 }}>
             {state.turnOrder.map((id) => (
@@ -744,7 +748,7 @@ export function OnlineGame({
               }}
             >
               <h1 style={{ fontSize: 48, margin: 0, textAlign: 'center' }}>
-                {renderColoredText(nameFor(winnerId), nameColorMap)} Wins!
+                {colorName(winnerId, nameFor(winnerId), state)} Wins!
               </h1>
               <div style={{ transform: 'scale(1.1)', transformOrigin: 'top center' }}>
                 {state.mode === 'lastStanding' ? <Lives state={state} displayName={nameFor} /> : <Leaderboard state={state} displayName={nameFor} />}
@@ -788,6 +792,19 @@ export function OnlineGame({
             </div>
           )}
         </div>
+      )}
+      {introActive && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: '#000',
+            zIndex: 590,
+            opacity: introOpacity,
+            transition: `opacity ${introOpacity === 1 ? 5 : 3}s ease`,
+            pointerEvents: 'none',
+          }}
+        />
       )}
       {noticeStack}
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, marginBottom: 20, flexWrap: 'wrap' }}>
