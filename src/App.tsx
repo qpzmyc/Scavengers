@@ -23,6 +23,7 @@ import {
   SHOOT_AMMO_COST,
   BOMB_AMMO_COST,
   ATTACK_ENERGY_COST,
+  maxMoveTilesForCount,
 } from './engine';
 import type { PlayerId } from './engine';
 import { Board, type Highlight, type RedTint, type DeathAnim } from './components/Board';
@@ -95,7 +96,10 @@ function useCellSize(): number {
   return size;
 }
 
-type Route = { kind: 'menu' } | { kind: 'game' } | { kind: 'online'; roomId: string; create?: EnterRoomConfig['create'] };
+type Route =
+  | { kind: 'menu'; initialGameType?: 'online' | 'inPerson' | 'bots'; initialScreen?: 'gameType' | 'settings' | 'join' }
+  | { kind: 'game' }
+  | { kind: 'online'; roomId: string; create?: EnterRoomConfig['create'] };
 
 function App() {
   const [route, setRoute] = useState<Route>({ kind: 'menu' });
@@ -215,6 +219,7 @@ function App() {
     attack: canPunch || canShoot || canBomb,
     fake: me.energy >= PHANTOM_ENERGY_COST,
   };
+  const maxMoveTiles = maxMoveTilesForCount(state.turnOrder.length);
 
   // The base a fake move projects from: an existing phantom keeps accumulating from
   // its current display position, not from the real player.
@@ -226,7 +231,7 @@ function App() {
     if (flow.kind === 'move') {
       const cursor = flow.path.length ? flow.path[flow.path.length - 1] : me.position;
       const remainingEnergy = simulateEnergyAfterPath(state.board, me.energy, flow.path);
-      if (flow.path.length < 2 && remainingEnergy >= 1) {
+      if (flow.path.length < maxMoveTiles && remainingEnergy >= 1) {
         for (const p of neighbors(state.board, cursor)) {
           // Note: the player's own starting tile IS allowed here (once they've stepped
           // away), so a two-step move can loop back to where it began.
@@ -493,8 +498,8 @@ function App() {
         // Snap back to the real starting tile first (the live preview already showed the
         // destination), then step through the path so the whole walk plays out.
         const walkFrames: AnimFrame[] = [plainFrame(state, MOVE_STEP_MS)];
-        if (flow.path.length === 2) {
-          walkFrames.push(plainFrame(movePlayer(state, actorId, [flow.path[0]]), MOVE_STEP_MS));
+        for (let i = 1; i < flow.path.length; i++) {
+          walkFrames.push(plainFrame(movePlayer(state, actorId, flow.path.slice(0, i)), MOVE_STEP_MS));
         }
 
         if (squashedIds.length) {
@@ -900,6 +905,8 @@ function App() {
   if (route.kind === 'menu') {
     return (
       <MenuFlow
+        initialGameType={route.initialGameType}
+        initialScreen={route.initialScreen}
         onStartGame={(nextMode, count) => {
           startGame(nextMode, count);
           setRoute({ kind: 'game' });
@@ -915,7 +922,7 @@ function App() {
       <OnlineSession
         roomId={route.roomId}
         create={route.create}
-        onLeave={() => setRoute({ kind: 'menu' })}
+        onLeave={() => setRoute({ kind: 'menu', initialGameType: 'online', initialScreen: 'settings' })}
       />
     );
   }
@@ -1022,6 +1029,7 @@ function App() {
                 onBack={handleBack}
                 onCancel={handleCancel}
                 width={columnWidth}
+                maxMoveTiles={maxMoveTiles}
               />
             )}
           </div>

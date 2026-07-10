@@ -2,6 +2,7 @@ import { type ReactNode, useEffect, useRef, useState } from 'react';
 import {
   type GameState,
   type Position,
+  type PlayerId,
   movePlayer,
   restPlayer,
   fakeMove,
@@ -19,6 +20,7 @@ import {
   SHOOT_AMMO_COST,
   BOMB_AMMO_COST,
   ATTACK_ENERGY_COST,
+  maxMoveTilesForCount,
 } from '../engine';
 import { Board, type Highlight, type RedTint, type DeathAnim } from '../components/Board';
 import { ResourceBars, type ResourcePreview } from '../components/ResourceBars';
@@ -39,15 +41,17 @@ import { buildOnlineFrames } from './buildOnlineFrames';
 import { flowToRequest } from './flowToRequest';
 import type { ActionEvent } from './protocol';
 
-// Renders a message, tinting any word that names a player color with that color.
-function renderColoredText(text: string, colorSet: Set<string>): ReactNode[] {
-  return text.split(/([A-Za-z]+)/).map((tok, i) =>
-    colorSet.has(tok.toLowerCase()) ? (
-      <span key={i} style={{ color: tok.toLowerCase(), fontWeight: 800, textShadow: '0 1px 2px rgba(0,0,0,0.55)' }}>{tok}</span>
+// Renders a message, tinting any word that names a player (by custom name or color) with
+// that player's color.
+function renderColoredText(text: string, nameColorMap: Map<string, string>): ReactNode[] {
+  return text.split(/([A-Za-z]+)/).map((tok, i) => {
+    const color = nameColorMap.get(tok.toLowerCase());
+    return color ? (
+      <span key={i} style={{ color, fontWeight: 800, textShadow: '0 1px 2px rgba(0,0,0,0.55)' }}>{tok}</span>
     ) : (
       <span key={i}>{tok}</span>
-    )
-  );
+    );
+  });
 }
 
 // Simulates energy remaining after walking `path` from `startEnergy`, subtracting
@@ -88,12 +92,41 @@ export function OnlineGame({ room, onLeave, isHost }: { room: OnlineRoom; onLeav
   const cellSize = useCellSize();
 
   const [notifications, setNotifications] = useState<
-    { id: number; killerColor: string; killerName: string; victimColor: string; victimName: string; verb: string }[]
+    { id: number; killerId: PlayerId; victimId: PlayerId; verb: string }[]
   >([]);
   const notificationIdRef = useRef(0);
 
   const [actionNotices, setActionNotices] = useState<{ id: number; text: string; kind: 'warning' | 'kill' | 'immune' | 'phantom'; leaving?: boolean }[]>([]);
   const actionNoticeIdRef = useRef(0);
+
+  // Random-first-turn reveal overlay: runs once on mount (which always coincides with a
+  // fresh gameStart, since OnlineSession only mounts OnlineGame once phase leaves 'lobby'
+  // and keeps the same instance across pause/resume).
+  const [revealing, setRevealing] = useState(true);
+  const [highlightId, setHighlightId] = useState<PlayerId | null>(null);
+  const revealStartedRef = useRef(false);
+
+  useEffect(() => {
+    if (revealStartedRef.current || !room.state) return;
+    revealStartedRef.current = true;
+    const order = room.state.turnOrder;
+    let i = 0;
+    setHighlightId(order[0]);
+    const interval = window.setInterval(() => {
+      i = (i + 1) % order.length;
+      setHighlightId(order[i]);
+    }, 120);
+    const stop = window.setTimeout(() => {
+      window.clearInterval(interval);
+      setHighlightId(room.state!.currentTurn);
+      window.setTimeout(() => setRevealing(false), 500);
+    }, 1500);
+    return () => {
+      window.clearInterval(interval);
+      window.clearTimeout(stop);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [room.state]);
 
   const prevStateRef = useRef<GameState | null>(null);
   const processedEventRef = useRef<ActionEvent | null>(null);
@@ -149,6 +182,20 @@ export function OnlineGame({ room, onLeave, isHost }: { room: OnlineRoom; onLeav
 
   const attackVerb: Record<AttackType, string> = { punch: 'punched', shoot: 'shot', bomb: 'bombed' };
 
+  // Custom name if the player set one, else their color as stored by the engine (already
+  // lowercase, e.g. 'green') — used for every online notification/label below.
+  const nameFor = (id: PlayerId): string => {
+    const entry = room.roster.find((r) => r.playerId === id);
+    const color = room.state?.players[id].color ?? '';
+    return entry?.name || color;
+  };
+  // Renders a player for viewer-aware notification text: the viewer sees "You"/"you"
+  // (capitalized only when sentenceStart is true) for themselves, and nameFor(id) otherwise.
+  const describe = (id: PlayerId, sentenceStart: boolean): string => {
+    if (id === room.myPlayerId) return sentenceStart ? 'You' : 'you';
+    return nameFor(id);
+  };
+
   // ---- Incoming-transition effect: snaps or animates whenever room.state/lastEvent change ----
   useEffect(() => {
     if (!room.state) return;
@@ -170,29 +217,32 @@ export function OnlineGame({ room, onLeave, isHost }: { room: OnlineRoom; onLeav
     const frames = buildOnlineFrames(before, after, event);
 
     if (event.killedPlayerIds.length) {
-      const killer = after.players[event.actorId];
       const req = event.request;
       const verb = req.kind === 'move' ? 'crushed' : req.kind === 'attack' ? attackVerb[req.type] : null;
       if (verb) {
         setNotifications((list) => {
-          const additions = event.killedPlayerIds.map((victimId) => {
-            const victim = after.players[victimId];
-            return {
-              id: notificationIdRef.current++,
-              killerColor: killer.color,
-              killerName: killer.color,
-              victimColor: victim.color,
-              victimName: victim.color,
-              verb,
-            };
-          });
+          const additions = event.killedPlayerIds.map((victimId) => ({
+            id: notificationIdRef.current++,
+            killerId: event.actorId,
+            victimId,
+            verb,
+          }));
           return [...list, ...additions];
         });
-        const victimNames = event.killedPlayerIds.map((id) => after.players[id].color.toUpperCase());
-        const killMsg =
-          after.winner === null && verb !== 'crushed'
-            ? `${verb[0].toUpperCase()}${verb.slice(1)} ${victimNames.join(', ')} — +1 extra turn!`
-            : `${verb[0].toUpperCase()}${verb.slice(1)} ${victimNames.join(', ')}!`;
+
+        const selfKill = event.killedPlayerIds.length === 1 && event.killedPlayerIds[0] === event.actorId;
+        let killMsg: string;
+        if (selfKill) {
+          killMsg =
+            event.actorId === room.myPlayerId
+              ? `You ${verb} yourself!`
+              : `${nameFor(event.actorId)} ${verb} themselves!`;
+        } else {
+          const subject = describe(event.actorId, true);
+          const victims = event.killedPlayerIds.map((id) => describe(id, false)).join(', ');
+          const suffix = after.winner === null && verb !== 'crushed' ? ' — +1 extra turn!' : '!';
+          killMsg = `${subject} ${verb} ${victims}${suffix}`;
+        }
         pushActionNotice(killMsg, 'kill');
       }
     }
@@ -287,7 +337,10 @@ export function OnlineGame({ room, onLeave, isHost }: { room: OnlineRoom; onLeav
   const myTurn = state.currentTurn === viewerId;
   const gameOver = state.winner !== null;
   const interactive = myTurn && !animating && !sending && room.phase === 'playing' && state.winner === null;
-  const colorSet = new Set(state.turnOrder.map((id) => state.players[id].color.toLowerCase()));
+  const nameColorMap = new Map<string, string>(
+    state.turnOrder.map((id) => [nameFor(id).toLowerCase(), state.players[id].color] as const)
+  );
+  nameColorMap.set('you', me.color);
 
   const canPunch = me.energy >= PUNCH_ENERGY_COST;
   const canShoot = me.ammo >= SHOOT_AMMO_COST && me.energy >= ATTACK_ENERGY_COST;
@@ -300,6 +353,7 @@ export function OnlineGame({ room, onLeave, isHost }: { room: OnlineRoom; onLeav
     attack: canPunch || canShoot || canBomb,
     fake: me.energy >= PHANTOM_ENERGY_COST,
   };
+  const maxMoveTiles = maxMoveTilesForCount(state.turnOrder.length);
 
   const phantomBase = me.isPhantom && me.phantomDisplayPosition ? me.phantomDisplayPosition : me.position;
 
@@ -309,7 +363,7 @@ export function OnlineGame({ room, onLeave, isHost }: { room: OnlineRoom; onLeav
     if (flow.kind === 'move') {
       const cursor = flow.path.length ? flow.path[flow.path.length - 1] : me.position;
       const remainingEnergy = simulateEnergyAfterPath(state.board, me.energy, flow.path);
-      if (flow.path.length < 2 && remainingEnergy >= 1) {
+      if (flow.path.length < maxMoveTiles && remainingEnergy >= 1) {
         for (const p of neighbors(state.board, cursor)) {
           if (others.some((o) => eq(p, o.isPhantom && o.phantomDisplayPosition ? o.phantomDisplayPosition : o.position))) continue;
           if (flow.path.some((s) => eq(s, p))) continue;
@@ -544,17 +598,53 @@ export function OnlineGame({ room, onLeave, isHost }: { room: OnlineRoom; onLeav
           }}
         >
           <span aria-hidden style={{ fontSize: 18 }}>{n.kind === 'kill' ? '💀' : n.kind === 'immune' ? '🛡️' : n.kind === 'phantom' ? '👻' : '⚠️'}</span>
-          <span>{renderColoredText(n.text, colorSet)}</span>
+          <span>{renderColoredText(n.text, nameColorMap)}</span>
         </div>
       ))}
     </div>
   );
 
-  const statusText = sending || animating ? 'Resolving…' : !myTurn ? `Waiting for ${state.players[state.currentTurn].color}…` : null;
+  const statusText = sending || animating ? 'Resolving…' : !myTurn ? `Waiting for ${nameFor(state.currentTurn)}…` : null;
 
   return (
     <div style={{ minHeight: '100vh', padding: 24, boxSizing: 'border-box' }}>
       {pausedOverlay}
+      {revealing && highlightId && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: theme.scrim,
+            zIndex: 400,
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 24,
+          }}
+        >
+          <div style={{ fontSize: 18, color: theme.textMuted, fontWeight: 600, letterSpacing: 1 }}>
+            Choosing first turn…
+          </div>
+          <div style={{ display: 'flex', gap: 18 }}>
+            {state.turnOrder.map((id) => (
+              <div
+                key={id}
+                style={{
+                  width: 64,
+                  height: 64,
+                  borderRadius: '50%',
+                  background: state.players[id].color,
+                  opacity: id === highlightId ? 1 : 0.35,
+                  transform: id === highlightId ? 'scale(1.15)' : 'scale(1)',
+                  transition: 'all 0.1s ease',
+                  boxShadow: id === highlightId ? `0 0 24px ${state.players[id].color}` : 'none',
+                }}
+              />
+            ))}
+          </div>
+        </div>
+      )}
       {noticeStack}
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, marginBottom: 20, flexWrap: 'wrap' }}>
         <h1 style={{ fontSize: 26 }}>Scavengers</h1>
@@ -581,7 +671,7 @@ export function OnlineGame({ room, onLeave, isHost }: { room: OnlineRoom; onLeav
       </div>
 
       <div style={{ display: 'flex', gap: 24, alignItems: 'flex-start', justifyContent: 'center', flexWrap: 'wrap' }}>
-        {state.mode === 'lastStanding' ? <Lives state={state} /> : <Leaderboard state={state} />}
+        {state.mode === 'lastStanding' ? <Lives state={state} /> : <Leaderboard state={state} displayName={nameFor} />}
 
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}>
           {gameOver || room.phase === 'over' ? (
@@ -604,7 +694,7 @@ export function OnlineGame({ room, onLeave, isHost }: { room: OnlineRoom; onLeav
               </button>
             </div>
           ) : (
-            <ResourceBars player={me} width={columnWidth} preview={preview} />
+            <ResourceBars player={me} width={columnWidth} preview={preview} showTurnLabel={myTurn} displayName={nameFor(viewerId)} />
           )}
 
           <div style={{ position: 'relative' }}>
@@ -641,6 +731,7 @@ export function OnlineGame({ room, onLeave, isHost }: { room: OnlineRoom; onLeav
                 onBack={handleBack}
                 onCancel={handleCancel}
                 width={columnWidth}
+                maxMoveTiles={maxMoveTiles}
               />
             )}
           </div>
@@ -662,21 +753,30 @@ export function OnlineGame({ room, onLeave, isHost }: { room: OnlineRoom; onLeav
             <div style={{ color: theme.textMuted, fontSize: 13, fontStyle: 'italic' }}>No kills yet</div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {notifications.map((n) => (
-                <div
-                  key={n.id}
-                  style={{
-                    fontSize: 14,
-                    fontWeight: 600,
-                    color: theme.heading,
-                    animation: 'notificationIn 0.25s ease',
-                  }}
-                >
-                  <span style={{ color: n.killerColor }}>{n.killerName.toUpperCase()}</span>
-                  {` ${n.verb} `}
-                  <span style={{ color: n.victimColor }}>{n.victimName.toUpperCase()}</span>
-                </div>
-              ))}
+              {notifications.map((n) => {
+                const selfKill = n.killerId === n.victimId;
+                return (
+                  <div
+                    key={n.id}
+                    style={{
+                      fontSize: 14,
+                      fontWeight: 600,
+                      color: theme.heading,
+                      animation: 'notificationIn 0.25s ease',
+                    }}
+                  >
+                    <span style={{ color: state.players[n.killerId].color }}>{describe(n.killerId, true)}</span>
+                    {selfKill ? (
+                      ` ${n.verb} themselves`
+                    ) : (
+                      <>
+                        {` ${n.verb} `}
+                        <span style={{ color: state.players[n.victimId].color }}>{describe(n.victimId, false)}</span>
+                      </>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>

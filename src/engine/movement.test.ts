@@ -25,8 +25,18 @@ describe('movePlayer', () => {
     expect(next.players.p1.position).toEqual({ x: 1, y: 1 });
   });
 
-  it('rejects a path longer than 2 tiles', () => {
+  it('allows up to 3 tiles in a 2-player game but rejects a 4th', () => {
     const state = createInitialGameState('lastStanding');
+    expect(() =>
+      movePlayer(state, 'p1', [{ x: 1, y: 0 }, { x: 2, y: 0 }, { x: 3, y: 0 }])
+    ).not.toThrow();
+    expect(() =>
+      movePlayer(state, 'p1', [{ x: 1, y: 0 }, { x: 2, y: 0 }, { x: 3, y: 0 }, { x: 4, y: 0 }])
+    ).toThrow();
+  });
+
+  it('rejects a path longer than 2 tiles in a 4-player game', () => {
+    const state = createInitialGameState('lastStanding', 4);
     expect(() =>
       movePlayer(state, 'p1', [{ x: 1, y: 0 }, { x: 2, y: 0 }, { x: 3, y: 0 }])
     ).toThrow();

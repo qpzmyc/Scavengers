@@ -12,6 +12,12 @@ interface ResourceBarsProps {
   width: number;
   // Hypothetical resources if the pending (unconfirmed) action were confirmed.
   preview?: ResourcePreview | null;
+  // Whether to show "— your turn" next to the name. Defaults to true (hotseat's only call
+  // site always renders this component during the viewing player's own turn already).
+  showTurnLabel?: boolean;
+  // Overrides the color-based name (e.g. a custom online display name). Falls back to
+  // player.color.toUpperCase() when omitted.
+  displayName?: string;
 }
 
 function Bar({
@@ -96,7 +102,7 @@ function Bar({
   );
 }
 
-export function ResourceBars({ player, width, preview }: ResourceBarsProps) {
+export function ResourceBars({ player, width, preview, showTurnLabel = true, displayName }: ResourceBarsProps) {
   return (
     <div
       style={{
@@ -114,8 +120,8 @@ export function ResourceBars({ player, width, preview }: ResourceBarsProps) {
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2 }}>
         <span style={{ width: 12, height: 12, borderRadius: '50%', background: player.color, display: 'inline-block' }} />
-        <strong style={{ color: theme.heading }}>{player.color.toUpperCase()}</strong>
-        <span style={{ color: theme.textMuted, fontSize: 12 }}>— your turn</span>
+        <strong style={{ color: theme.heading }}>{displayName ?? player.color.toUpperCase()}</strong>
+        {showTurnLabel && <span style={{ color: theme.textMuted, fontSize: 12 }}>— your turn</span>}
       </div>
       <Bar label="Energy" value={player.energy} max={MAX_ENERGY} color={theme.energy} previewValue={preview?.energy} />
       <Bar label="Ammo" value={player.ammo} max={MAX_AMMO} color={theme.ammo} previewValue={preview?.ammo} />

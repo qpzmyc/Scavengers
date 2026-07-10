@@ -8,6 +8,7 @@ export interface RosterEntry {
   color: PlayerColor;
   connected: boolean;
   isHost: boolean;
+  name: string | null;
 }
 
 // ---- Actions (client -> server intent; also echoed inside ActionEvent) ----
@@ -31,7 +32,8 @@ export type ClientMsg =
   | { type: 'join'; token?: string }
   | { type: 'startGame' }
   | { type: 'action'; request: ActionRequest }
-  | { type: 'endMatch' };
+  | { type: 'endMatch' }
+  | { type: 'setName'; name: string };
 
 export type ServerMsg =
   | { type: 'assigned'; playerId: PlayerId; token: string }

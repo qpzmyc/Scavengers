@@ -60,8 +60,8 @@ export function buildOnlineFrames(before: GameState, after: GameState, event: Ac
   if (req.kind === 'move') {
     // Step the mover tile-by-tile: snap to the start, then show each intermediate tile.
     const frames: AnimFrame[] = [plainFrame(before, MOVE_STEP_MS)];
-    if (req.path.length === 2) {
-      frames.push(plainFrame(movePlayer(before, actorId, [req.path[0]]), MOVE_STEP_MS));
+    for (let i = 1; i < req.path.length; i++) {
+      frames.push(plainFrame(movePlayer(before, actorId, req.path.slice(0, i)), MOVE_STEP_MS));
     }
     if (event.killedPlayerIds.length) {
       // Phantom-crush: no ripple, just the death fade on the after-state.

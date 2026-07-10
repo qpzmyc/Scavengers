@@ -81,6 +81,9 @@ interface ControlPanelProps {
   // Available width (matches the board's width) that the action buttons should
   // fill edge-to-edge, scaling their padding/font proportionally.
   width?: number;
+  // Max move-path length for this game (3 in 2-player games, 2 otherwise) — see
+  // maxMoveTilesForCount in engine/constants.ts.
+  maxMoveTiles: number;
 }
 
 const ATTACK_TARGET_HINT: Record<AttackType, string> = {
@@ -157,6 +160,7 @@ export function ControlPanel({
   onBack,
   onCancel,
   width = DEFAULT_ROW_WIDTH,
+  maxMoveTiles,
 }: ControlPanelProps) {
   if (gameOver) {
     return <div style={{ ...wrap, fontStyle: 'italic', color: theme.textMuted }}>Game over — start a new game above.</div>;
@@ -184,7 +188,7 @@ export function ControlPanel({
     return (
       <div style={wrap} data-testid="control-panel">
         <div style={title}>Move</div>
-        <div style={hint}>Click an adjacent square (up to 2 steps). Chosen: {flow.path.length}/2. Click your last step to undo it.</div>
+        <div style={hint}>Click an adjacent square (up to {maxMoveTiles} steps). Chosen: {flow.path.length}/{maxMoveTiles}. Click your last step to undo it.</div>
         <div style={row()}>
           <button style={sizedBtn('secondary', false, false, width)} onClick={onCancel}>Cancel</button>
           <button style={sizedBtn('primary', !confirmEnabled, false, width)} disabled={!confirmEnabled} onClick={onConfirm}>Confirm</button>

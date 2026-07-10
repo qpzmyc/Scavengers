@@ -1,8 +1,11 @@
-import type { GameState } from '../engine';
+import type { GameState, PlayerId } from '../engine';
 import { theme } from '../theme';
 
 interface LeaderboardProps {
   state: GameState;
+  // Overrides the color-based label per player (e.g. a custom online display name).
+  // Falls back to color.toUpperCase() when omitted (hotseat's call sites omit it).
+  displayName?: (id: PlayerId) => string;
 }
 
 const th: React.CSSProperties = {
@@ -24,7 +27,7 @@ const td: React.CSSProperties = {
   color: theme.text,
 };
 
-export function Leaderboard({ state }: LeaderboardProps) {
+export function Leaderboard({ state, displayName }: LeaderboardProps) {
   const players = state.turnOrder.map((id) => state.players[id]);
   const showScore = state.mode === 'deathmatch';
 
@@ -55,7 +58,7 @@ export function Leaderboard({ state }: LeaderboardProps) {
             <tr key={p.id} style={{ borderTop: `1px solid ${theme.border}` }}>
               <td style={{ ...td, textAlign: 'left', display: 'flex', alignItems: 'center', gap: 8 }}>
                 <span style={{ width: 12, height: 12, borderRadius: '50%', background: p.color, display: 'inline-block' }} />
-                {p.color.toUpperCase()}
+                {displayName ? displayName(p.id) : p.color.toUpperCase()}
               </td>
               <td style={td}>{p.kills}</td>
               <td style={td}>{p.deaths}</td>

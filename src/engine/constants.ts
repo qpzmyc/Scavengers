@@ -8,8 +8,14 @@ export const MAX_AMMO = 3;
 export const START_AMMO = 1;
 
 export const MOVE_ENERGY_COST_PER_TILE = 1;
-export const MAX_MOVE_TILES = 2;
+export const MAX_MOVE_TILES_DEFAULT = 2;
+export const MAX_MOVE_TILES_2P = 3; // 2-player games get an extra step of mobility
 export const REST_ENERGY_GAIN = 3;
+
+// Max move-path length for a game with `playerCount` players.
+export function maxMoveTilesForCount(playerCount: number): number {
+  return playerCount === 2 ? MAX_MOVE_TILES_2P : MAX_MOVE_TILES_DEFAULT;
+}
 export const ENERGY_PICKUP_VALUE = 5;
 
 export const PHANTOM_ENERGY_COST = 2;

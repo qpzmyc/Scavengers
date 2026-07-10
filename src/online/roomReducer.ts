@@ -5,12 +5,14 @@ import type { RoomPhase, RosterEntry, ServerMsg, ActionRequest } from './protoco
 
 const SEAT_ORDER: PlayerId[] = ['p1', 'p2', 'p3', 'p4'];
 const COLORS: Record<PlayerId, PlayerColor> = { p1: 'green', p2: 'red', p3: 'blue', p4: 'yellow' };
+const MAX_NAME_LENGTH = 16;
 
 interface Slot {
   playerId: PlayerId;
   connId: string | null;   // the socket currently seated here (retained while disconnected mid-game for reconnect)
   connected: boolean;
   token: string | null;    // per-seat secret; required to reclaim a reserved seat
+  name: string | null;
 }
 
 export interface RoomModel {
@@ -28,6 +30,7 @@ export type RoomInput =
   | { t: 'startGame'; connId: string }
   | { t: 'action'; connId: string; request: ActionRequest }
   | { t: 'endMatch'; connId: string }
+  | { t: 'setName'; connId: string; name: string }
   | { t: 'disconnect'; connId: string };
 
 export interface Outbound {
@@ -40,7 +43,13 @@ export interface RoomStep {
 }
 
 export function roomInit(mode: GameMode, playerCount: number): RoomModel {
-  const slots: Slot[] = SEAT_ORDER.slice(0, playerCount).map((playerId) => ({ playerId, connId: null, connected: false, token: null }));
+  const slots: Slot[] = SEAT_ORDER.slice(0, playerCount).map((playerId) => ({
+    playerId,
+    connId: null,
+    connected: false,
+    token: null,
+    name: null,
+  }));
   return { phase: 'lobby', mode, playerCount, slots, hostConnId: null, state: null };
 }
 
@@ -50,6 +59,7 @@ function rosterEntries(model: RoomModel): RosterEntry[] {
     color: COLORS[s.playerId],
     connected: s.connected,
     isHost: s.connId !== null && s.connId === model.hostConnId,
+    name: s.name,
   }));
 }
 function rosterMsg(model: RoomModel): ServerMsg {
@@ -106,9 +116,21 @@ export function roomReduce(model: RoomModel, input: RoomInput): RoomStep {
       if (input.connId !== model.hostConnId) return { model, out: [err(input.connId, 'Only the host can start.')] };
       if (model.phase !== 'lobby') return { model, out: [err(input.connId, 'The game has already started.')] };
       if (!model.slots.every((s) => s.connId !== null && s.connected)) return { model, out: [err(input.connId, 'The room is not full yet.')] };
-      const state = createInitialGameState(model.mode, model.playerCount);
+      const initial = createInitialGameState(model.mode, model.playerCount);
+      const firstTurn = initial.turnOrder[Math.floor(Math.random() * initial.turnOrder.length)];
+      const state = { ...initial, currentTurn: firstTurn };
       const next: RoomModel = { ...model, phase: 'playing', state };
       return { model: next, out: [{ to: 'all', msg: { type: 'gameStart', state } }, { to: 'all', msg: rosterMsg(next) }] };
+    }
+
+    case 'setName': {
+      const slot = slotOf(model, input.connId);
+      if (!slot) return { model, out: [] };
+      const trimmed = input.name.trim().slice(0, MAX_NAME_LENGTH);
+      const nextName = trimmed.length > 0 ? trimmed : null;
+      const slots = model.slots.map((s) => (s === slot ? { ...s, name: nextName } : s));
+      const next: RoomModel = { ...model, slots };
+      return { model: next, out: [{ to: 'all', msg: rosterMsg(next) }] };
     }
 
     case 'action': {
@@ -150,4 +172,10 @@ export function roomReduce(model: RoomModel, input: RoomInput): RoomStep {
       return { model: next, out };
     }
   }
+}
+
+// True once a room's last connected player has left while it was still in the lobby
+// (never started) — the signal server.ts uses to auto-delist it from the public lobby.
+export function isAbandonedInLobby(model: RoomModel): boolean {
+  return model.phase === 'lobby' && model.slots.every((s) => !s.connected);
 }

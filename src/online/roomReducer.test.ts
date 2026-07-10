@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { roomInit, roomReduce, type RoomModel } from './roomReducer';
+import { roomInit, roomReduce, isAbandonedInLobby, type RoomModel } from './roomReducer';
 
 // Seat two connections into a fresh 2-player room, returning the model after both joins.
 function seatedTwo(): RoomModel {
@@ -46,12 +46,16 @@ describe('roomReduce', () => {
   it('broadcasts new state on a legal action and errors to the sender on an out-of-turn action', () => {
     let m = seatedTwo();
     m = roomReduce(m, { t: 'startGame', connId: 'A' }).model;
-    const bad = roomReduce(m, { t: 'action', connId: 'B', request: { kind: 'rest' } });
-    expect(bad.out).toContainEqual({ to: { connId: 'B' }, msg: { type: 'error', message: expect.stringMatching(/turn/i) } });
+    // startGame now picks a random first turn, so resolve actor/non-actor dynamically
+    // instead of assuming p1 (connId 'A') always goes first.
+    const firstTurn = m.state!.currentTurn;
+    const [actorConnId, otherConnId] = firstTurn === 'p1' ? ['A', 'B'] : ['B', 'A'];
+    const bad = roomReduce(m, { t: 'action', connId: otherConnId, request: { kind: 'rest' } });
+    expect(bad.out).toContainEqual({ to: { connId: otherConnId }, msg: { type: 'error', message: expect.stringMatching(/turn/i) } });
 
-    const good = roomReduce(m, { t: 'action', connId: 'A', request: { kind: 'rest' } });
+    const good = roomReduce(m, { t: 'action', connId: actorConnId, request: { kind: 'rest' } });
     expect(good.out.find((o) => o.to === 'all' && o.msg.type === 'state')).toBeDefined();
-    expect(good.model.state!.currentTurn).toBe('p2');
+    expect(good.model.state!.currentTurn).toBe(firstTurn === 'p1' ? 'p2' : 'p1');
   });
 
   it('pauses on mid-game disconnect and resumes only when the ORIGINAL player rejoins with their token', () => {
@@ -108,5 +112,64 @@ describe('roomReduce', () => {
     const step = roomReduce(m, { t: 'endMatch', connId: 'A' });
     expect(step.model.phase).toBe('over');
     expect(step.out.some((o) => o.to === 'all' && o.msg.type === 'over')).toBe(true);
+  });
+
+  it('setName trims and stores a custom name on the caller\'s own seat, then broadcasts roster', () => {
+    let m = seatedTwo();
+    const step = roomReduce(m, { t: 'setName', connId: 'A', name: '  Ellie  ' });
+    m = step.model;
+    expect(m.slots.find((s) => s.connId === 'A')?.name).toBe('Ellie');
+    const rosterMsg = step.out.find((o) => o.to === 'all' && o.msg.type === 'roster');
+    expect(rosterMsg).toBeDefined();
+    const entries = (rosterMsg!.msg as { entries: { playerId: string; name: string | null }[] }).entries;
+    expect(entries.find((e) => e.playerId === 'p1')?.name).toBe('Ellie');
+  });
+
+  it('setName with an empty/whitespace-only name clears back to null', () => {
+    let m = seatedTwo();
+    m = roomReduce(m, { t: 'setName', connId: 'A', name: 'Ellie' }).model;
+    m = roomReduce(m, { t: 'setName', connId: 'A', name: '   ' }).model;
+    expect(m.slots.find((s) => s.connId === 'A')?.name).toBeNull();
+  });
+
+  it('setName clamps to 16 characters', () => {
+    let m = seatedTwo();
+    m = roomReduce(m, { t: 'setName', connId: 'A', name: 'ThisNameIsWayTooLongForARoster' }).model;
+    expect(m.slots.find((s) => s.connId === 'A')?.name).toBe('ThisNameIsWayToo');
+  });
+
+  it('setName from a connId not seated in the room is a no-op', () => {
+    const m = seatedTwo();
+    const step = roomReduce(m, { t: 'setName', connId: 'stranger', name: 'X' });
+    expect(step.model).toEqual(m);
+    expect(step.out).toEqual([]);
+  });
+
+  it('startGame picks a currentTurn that is always a member of turnOrder (randomized across many runs)', () => {
+    const seen = new Set<string>();
+    for (let i = 0; i < 40; i++) {
+      const m = seatedTwo();
+      const started = roomReduce(m, { t: 'startGame', connId: 'A' });
+      const state = started.model.state!;
+      expect(state.turnOrder).toContain(state.currentTurn);
+      seen.add(state.currentTurn);
+    }
+    // Over 40 runs with a 2-way random pick, both players should have gone first at least once.
+    expect(seen.size).toBe(2);
+  });
+
+  it('isAbandonedInLobby is true only when every slot is disconnected and the room never started', () => {
+    let m = seatedTwo();
+    expect(isAbandonedInLobby(m)).toBe(false); // both connected
+    m = roomReduce(m, { t: 'disconnect', connId: 'A' }).model;
+    expect(isAbandonedInLobby(m)).toBe(false); // B still connected
+    m = roomReduce(m, { t: 'disconnect', connId: 'B' }).model;
+    expect(isAbandonedInLobby(m)).toBe(true); // both gone, still lobby
+
+    let started = seatedTwo();
+    started = roomReduce(started, { t: 'startGame', connId: 'A' }).model;
+    started = roomReduce(started, { t: 'disconnect', connId: 'A' }).model;
+    started = roomReduce(started, { t: 'disconnect', connId: 'B' }).model;
+    expect(isAbandonedInLobby(started)).toBe(false); // phase is 'paused', not 'lobby'
   });
 });
