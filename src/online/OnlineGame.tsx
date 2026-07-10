@@ -78,7 +78,7 @@ function useCellSize(): number {
   return size;
 }
 
-export function OnlineGame({ room, onLeave }: { room: OnlineRoom; onLeave: () => void }) {
+export function OnlineGame({ room, onLeave, isHost }: { room: OnlineRoom; onLeave: () => void; isHost: boolean }) {
   const [flow, setFlow] = useState<Flow>({ kind: 'menu' });
   const [display, setDisplay] = useState<GameState | null>(room.state);
   const [redTints, setRedTints] = useState<RedTint[]>([]);
@@ -213,7 +213,59 @@ export function OnlineGame({ room, onLeave }: { room: OnlineRoom; onLeave: () =>
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [room.error]);
 
-  // TODO(Task 3): paused overlay
+  const pausedOverlay =
+    room.phase === 'paused' ? (
+      <div
+        style={{
+          position: 'fixed',
+          inset: 0,
+          zIndex: 200,
+          background: 'rgba(10, 13, 18, 0.78)',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: 20,
+        }}
+      >
+        <div
+          style={{
+            background: theme.surface,
+            border: `1px solid ${theme.border}`,
+            borderRadius: theme.radius,
+            boxShadow: theme.shadow,
+            padding: '28px 36px',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            gap: 16,
+            maxWidth: 360,
+            textAlign: 'center',
+          }}
+        >
+          <div style={{ color: theme.heading, fontSize: 17, fontWeight: 700 }}>
+            Waiting for a player to reconnect…
+          </div>
+          {isHost && (
+            <button
+              onClick={() => room.send({ type: 'endMatch' })}
+              style={{
+                padding: '10px 20px',
+                fontSize: 14,
+                fontWeight: 600,
+                borderRadius: 8,
+                background: theme.accent,
+                border: `1px solid ${theme.accent}`,
+                color: '#fff',
+                cursor: 'pointer',
+              }}
+            >
+              End Match
+            </button>
+          )}
+        </div>
+      </div>
+    ) : null;
 
   if (!room.state || !room.myPlayerId || !display) {
     return (
@@ -497,6 +549,7 @@ export function OnlineGame({ room, onLeave }: { room: OnlineRoom; onLeave: () =>
 
   return (
     <div style={{ minHeight: '100vh', padding: 24, boxSizing: 'border-box' }}>
+      {pausedOverlay}
       {noticeStack}
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, marginBottom: 20, flexWrap: 'wrap' }}>
         <h1 style={{ fontSize: 26 }}>Scavengers</h1>
