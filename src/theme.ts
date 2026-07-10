@@ -26,6 +26,7 @@ export const theme = {
 
   radius: 10,
   shadow: '0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 24px rgba(0, 0, 0, 0.35)',
+  scrim: 'rgba(10, 13, 18, 0.78)', // dimming layer behind modal overlays (e.g. pause)
 } as const;
 
 // Soft translucent tints used to shade each player's corner spawn zone.

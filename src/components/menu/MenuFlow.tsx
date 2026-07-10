@@ -1,13 +1,20 @@
 import { useState } from 'react';
 import type { GameMode } from '../../engine';
 import { theme } from '../../theme';
+import { useLobby } from '../../online/useLobby';
+import type { LobbyRow } from '../../online/protocol';
 
 type GameType = 'online' | 'inPerson' | 'bots';
-type MenuScreen = 'gameType' | 'settings' | 'room' | 'join';
-type Visibility = 'public' | 'private';
+type MenuScreen = 'gameType' | 'settings' | 'join';
+
+export interface EnterRoomConfig {
+  roomId: string;
+  create?: { mode: GameMode; count: number; visibility: 'public' | 'private' };
+}
 
 interface MenuFlowProps {
   onStartGame: (mode: GameMode, count: number) => void;
+  onEnterRoom: (config: EnterRoomConfig) => void;
 }
 
 const ROOM_CODE_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
@@ -84,14 +91,96 @@ function BackArrow({ onClick }: { onClick: () => void }) {
   );
 }
 
-export function MenuFlow({ onStartGame }: MenuFlowProps) {
+function JoinScreen({ onBack, onEnterRoom }: { onBack: () => void; onEnterRoom: (config: EnterRoomConfig) => void }) {
+  const { rooms, refresh } = useLobby();
+  return (
+    <div style={screenWrap}>
+      <BackArrow onClick={onBack} />
+      <h1 style={{ fontSize: 36 }}>Join a Game</h1>
+      <div style={{ display: 'flex', gap: 12 }}>
+        <button
+          style={{ ...toggleBtn(false), margin: 0, padding: '12px 22px', fontSize: 15 }}
+          onClick={() => {
+            const code = window.prompt('Enter room code');
+            if (code && code.trim()) {
+              onEnterRoom({ roomId: code.trim().toUpperCase() });
+            }
+          }}
+        >
+          Enter code
+        </button>
+        <button
+          style={{ ...toggleBtn(false), margin: 0, padding: '12px 22px', fontSize: 15 }}
+          onClick={refresh}
+        >
+          Refresh
+        </button>
+      </div>
+      <div
+        style={{
+          ...card,
+          padding: 24,
+          minWidth: 360,
+          minHeight: 160,
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 10,
+        }}
+      >
+        {rooms.length === 0 ? (
+          <div
+            style={{
+              flex: 1,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: theme.textMuted,
+              fontStyle: 'italic',
+            }}
+          >
+            No public rooms
+          </div>
+        ) : (
+          rooms.map((row: LobbyRow) => {
+            const full = row.filled >= row.playerCount;
+            return (
+              <button
+                key={row.code}
+                disabled={full}
+                onClick={() => onEnterRoom({ roomId: row.code })}
+                style={{
+                  padding: '12px 16px',
+                  borderRadius: 8,
+                  background: theme.surfaceAlt,
+                  border: `1px solid ${theme.border}`,
+                  color: full ? theme.textMuted : theme.text,
+                  fontWeight: 600,
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  cursor: full ? 'not-allowed' : 'pointer',
+                  opacity: full ? 0.5 : 1,
+                }}
+              >
+                <span>{row.code}</span>
+                <span style={{ fontWeight: 400, color: theme.textMuted }}>
+                  {row.mode === 'lastStanding' ? 'Last Standing' : 'Deathmatch'}
+                </span>
+                <span>{row.filled}/{row.playerCount}</span>
+              </button>
+            );
+          })
+        )}
+      </div>
+    </div>
+  );
+}
+
+export function MenuFlow({ onStartGame, onEnterRoom }: MenuFlowProps) {
   const [screen, setScreen] = useState<MenuScreen>('gameType');
   const [gameType, setGameType] = useState<GameType>('inPerson');
   const [mode, setMode] = useState<GameMode>('lastStanding');
   const [playerCount, setPlayerCount] = useState<number>(2);
   const [creating, setCreating] = useState(false);
-  const [visibility, setVisibility] = useState<Visibility>('public');
-  const [roomCode, setRoomCode] = useState('');
 
   // ---- Screen 1: game type (root, no back) ----
   if (screen === 'gameType') {
@@ -144,8 +233,18 @@ export function MenuFlow({ onStartGame }: MenuFlowProps) {
         {gameType === 'online' ? (
           creating ? (
             <div style={{ display: 'flex', gap: 16 }}>
-              <button style={primaryBtn} onClick={() => { setVisibility('public'); setRoomCode(''); setScreen('room'); }}>Create Public Room</button>
-              <button style={primaryBtn} onClick={() => { setVisibility('private'); setRoomCode(generateRoomCode()); setScreen('room'); }}>Create Private Room</button>
+              <button
+                style={primaryBtn}
+                onClick={() => onEnterRoom({ roomId: generateRoomCode(), create: { mode, count: playerCount, visibility: 'public' } })}
+              >
+                Create Public Room
+              </button>
+              <button
+                style={primaryBtn}
+                onClick={() => onEnterRoom({ roomId: generateRoomCode(), create: { mode, count: playerCount, visibility: 'private' } })}
+              >
+                Create Private Room
+              </button>
             </div>
           ) : (
             <div style={{ display: 'flex', gap: 16 }}>
@@ -160,77 +259,9 @@ export function MenuFlow({ onStartGame }: MenuFlowProps) {
     );
   }
 
-  // ---- Room lobby ----
-  if (screen === 'room') {
-    const slots = Array.from({ length: playerCount }, (_, i) => (i === 0 ? 'You' : 'Waiting for player…'));
-    return (
-      <div style={screenWrap}>
-        <BackArrow onClick={() => setScreen('settings')} />
-        <h1 style={{ fontSize: 36 }}>{visibility === 'private' ? 'Private' : 'Public'} Room</h1>
-        <div style={{ ...card, padding: 24, minWidth: 360, display: 'flex', flexDirection: 'column', gap: 12 }}>
-          <div style={rowLabel}>Players ({playerCount} max)</div>
-          {slots.map((label, i) => (
-            <div
-              key={i}
-              style={{
-                padding: '12px 16px',
-                borderRadius: 8,
-                background: i === 0 ? theme.accentSoft : theme.surfaceAlt,
-                color: i === 0 ? theme.accentText : theme.textMuted,
-                fontWeight: 600,
-              }}
-            >
-              {label}
-            </div>
-          ))}
-        </div>
-        {visibility === 'private' && (
-          <div style={{ textAlign: 'center' }}>
-            <div style={rowLabel}>Room code</div>
-            <div style={{ fontSize: 32, fontWeight: 800, letterSpacing: 6, color: theme.heading }}>{roomCode}</div>
-          </div>
-        )}
-        <button style={primaryBtn} onClick={() => onStartGame(mode, playerCount)}>Start Game</button>
-      </div>
-    );
-  }
-
   // ---- Join ----
   if (screen === 'join') {
-    return (
-      <div style={screenWrap}>
-        <BackArrow onClick={() => setScreen('settings')} />
-        <h1 style={{ fontSize: 36 }}>Join a Game</h1>
-        <button
-          style={{ ...toggleBtn(false), margin: 0, padding: '12px 22px', fontSize: 15 }}
-          onClick={() => {
-            const code = window.prompt('Enter room code');
-            if (code && code.trim()) {
-              setVisibility('private');
-              setRoomCode(code.trim().toUpperCase());
-              setScreen('room');
-            }
-          }}
-        >
-          Enter code
-        </button>
-        <div
-          style={{
-            ...card,
-            padding: 24,
-            minWidth: 360,
-            minHeight: 160,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            color: theme.textMuted,
-            fontStyle: 'italic',
-          }}
-        >
-          No rooms available
-        </div>
-      </div>
-    );
+    return <JoinScreen onBack={() => setScreen('settings')} onEnterRoom={onEnterRoom} />;
   }
 
   return null;

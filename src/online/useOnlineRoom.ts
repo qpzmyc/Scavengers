@@ -67,17 +67,26 @@ export function useOnlineRoom(roomId: string, create?: { mode: GameMode; count: 
           setState(msg.state);
           setPhase('playing');
           setLastEvent(null);
+          setError(null);
           break;
         case 'state':
           setState(msg.state);
           setLastEvent(msg.event);
           setPhase(msg.state.winner !== null ? 'over' : 'playing');
+          // A successful broadcast clears any prior rejection, so a later identical
+          // rejection re-fires the consumer's [error] effect (which also re-unlocks).
+          setError(null);
           break;
         case 'paused':
           setPhase('paused');
           break;
         case 'resumed':
           setState(msg.state);
+          // Clear the pre-pause event so OnlineGame's incoming-transition effect
+          // treats the resumed snapshot as a null-event re-snap (like gameStart),
+          // rather than bailing on its processed-event guard and leaving `before`
+          // pointing at stale pre-pause state.
+          setLastEvent(null);
           setPhase('playing');
           break;
         case 'over':
