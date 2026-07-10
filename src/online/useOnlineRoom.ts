@@ -78,6 +78,11 @@ export function useOnlineRoom(roomId: string, create?: { mode: GameMode; count: 
           break;
         case 'resumed':
           setState(msg.state);
+          // Clear the pre-pause event so OnlineGame's incoming-transition effect
+          // treats the resumed snapshot as a null-event re-snap (like gameStart),
+          // rather than bailing on its processed-event guard and leaving `before`
+          // pointing at stale pre-pause state.
+          setLastEvent(null);
           setPhase('playing');
           break;
         case 'over':
