@@ -1,0 +1,57 @@
+# Online UX Polish — Design
+
+**Goal:** A batch of UX/balance fixes for the menu and online-room flow: bigger/restyled menu chrome, a create-room popup, a join-by-code popup, per-player custom names, room-code visibility, host-reassignment display order, auto-cleanup of abandoned public rooms, 4-ammo-pickup balance for 4-player games, a randomized first turn for online games, and viewer-aware turn/notification text.
+
+**Non-goals:** Hotseat visuals are unaffected except where a shared component (`Leaderboard`, `ResourceBars`) is reused — those get an optional prop so hotseat behavior is unchanged when the prop is omitted. No persistence of names/rooms across reloads (in-memory only, matches existing room/token model).
+
+## 1. Menu restyle (`MenuFlow.tsx`)
+
+- **Sizing:** every element in the game-type and settings cards grows except the bottom primary action button(s) (`primaryBtn`), which stay as-is. Concretely: title `h1` grows from 44px to ~64px with letter-spacing and a subtitle-weight treatment (bigger, some styling — color from `theme.heading`, a subtle `letterSpacing`); `card` padding, `toggleBtn` padding/font-size, and `rowLabel` font-size all increase (~1.3–1.5x current values).
+- **Back arrow position:** currently `position: absolute; top: 24; left: 24` — anchored to the screen corner. Change to be positioned relative to the card layout instead: render it as a normal flex child directly above/left-aligned with the card (e.g. a row containing the arrow at the card's left edge, width capped to the card's `minWidth`), so it moves with the content instead of pinning to the viewport corner. Both `MenuFlow.tsx`'s and `OnlineSession.tsx`'s `BackArrow` get this change (they're near-duplicates today — worth confirming whether to extract a shared component while touching both; see Task list).
+- **Create Game popup:** clicking "Create Game" (in the non-online-specific settings screen, or the online settings screen — same button) opens a modal overlay (dark `theme.scrim` backdrop, centered `card` panel, an "×" close button top-right of the panel) containing the existing "Create Public Room" / "Create Private Room" buttons. Closing the popup (× or backdrop click) returns to the settings screen without navigating. This replaces the current inline `creating` state's two-button row.
+- **Join popup — enter code:** clicking "Enter code" no longer uses `window.prompt`. It opens the same modal-popup style containing a text input (styled like the create popup) and a "Confirm" button. On confirm: call `onEnterRoom({ roomId: code })`, close the popup, and let `OnlineSession`/`useOnlineRoom` attempt the join. Two outcomes surface as toasts (reusing the existing action-notice mechanism already in `OnlineGame`/`App`, or a lightweight equivalent since `MenuFlow` doesn't have one today — see Task 3 for exact placement):
+  - Success: a "Successfully joined room" notice, shown once the room's first `roster` message arrives without an accompanying `error`.
+  - Failure: an "Invalid room code" notice, shown when the server's `error` message arrives before any `roster`/`assigned` (i.e. the join was rejected — full room or nonexistent code both surface this way, since the wire protocol doesn't currently distinguish them and adding that distinction is out of scope).
+
+## 2. Room screen (`OnlineSession.tsx`)
+
+- **Room code always shown:** drop the `showCode = create?.visibility === 'private' || !create` condition — always render the code block.
+- **Rename button:** next to your own roster row, a small button (icon-sized, e.g. a pencil glyph, ~28px) opens the same popup-style input used for join-by-code, prefilled with your current name (or blank). Confirm sends a new `ClientMsg` `{ type: 'setName', name }` (trimmed, max length enforced client-side e.g. 16 chars, empty string clears back to color-based display). Only rendered next to the row matching `room.myPlayerId`.
+- **Host reorder:** the roster list currently renders in fixed seat order (`p1..pN`). Change the render (not the underlying seat/turn order — that stays `p1..pN` for game logic) to sort a display copy so the current host's entry is first, others keep their relative order after.
+- **Start Game greyed out when not full:** already implemented (`disabled={room.roster.length < room.playerCount}` with reduced opacity) — no change needed, confirmed while reading the code.
+
+## 3. Random first turn + reveal animation (online only)
+
+- **Server:** in `roomReducer.ts`'s `startGame` case, after `createInitialGameState`, pick a random index into `turnOrder` and overwrite `state.currentTurn` with that player id (turnOrder itself is unchanged — only who goes first). This keeps `turns.ts`'s existing turn-advance logic untouched.
+- **Client reveal:** `OnlineGame` currently renders the board immediately on `gameStart`. Add a brief (~1.5s) pre-game overlay: a color-cycle flash through the connected players' color chips (simple `setInterval`-driven highlight, no engine involvement) before revealing `state.currentTurn`'s chip as the winner and dismissing into the normal board view. This is purely presentational client state (a local `revealing: boolean` + `highlightIndex`) gated on receiving a `gameStart` message; it does not block or delay the authoritative state (the board underneath is already correct, the overlay just delays the player's first look).
+
+## 4. Custom names replace color everywhere (online only)
+
+- **Wire:** `RosterEntry` gains `name: string | null`. `ClientMsg` gains `{ type: 'setName'; name: string }`. `roomReducer.ts` handles it: validates the requesting connId is seated, trims/clamps the name (empty → `null`), updates that slot, rebroadcasts `roster`.
+- **Display:** anywhere a player is currently rendered by `color.toUpperCase()` in the online path (`Leaderboard`, `ResourceBars`, `OnlineGame`'s kill notifications/notices, the "waiting for X" status text, the roster list), swap to `name ?? color.toUpperCase()` while keeping the color swatch/dot and the *text color* driven by `player.color` (as today) regardless of whether a custom name is shown. This requires threading a `nameFor(playerId): string` lookup (built once per render in `OnlineGame` from `room.roster`) down into `Leaderboard` and `ResourceBars` as a new optional prop (`displayName?: (id: PlayerId) => string`); when the prop is omitted (hotseat's `App.tsx` call sites), behavior is unchanged (falls back to `color.toUpperCase()`).
+
+## 5. Turn-text and per-viewer notification phrasing (online only)
+
+- **Bug fix:** `ResourceBars` hardcodes `"— your turn"` unconditionally. Add a `showTurnLabel: boolean` prop; `OnlineGame` passes `myTurn` (already computed at `OnlineGame.tsx:287`); hotseat's `App.tsx` call site passes `true` (it only ever renders this component during the viewing player's own turn already, so behavior is unchanged).
+- **Per-viewer kill/action phrasing:** today `OnlineGame`'s kill message (`killMsg`, `OnlineGame.tsx:192-195`) is identical for every viewer and never names the actor. Change: if `event.actorId === viewerId`, keep today's phrasing (acting player already knows it's them: `"Bombed RED!"`); otherwise prefix with the actor's display name: `"GREEN bombed RED!"` (lowercase verb when prefixed, since it's mid-sentence). Same treatment applies to the floating kill-notification chips (`notifications` state) if they currently omit the actor — check `killerName`/`killerColor` usage in the notification renderer and ensure the actor is visible there for non-actor viewers too.
+
+## 6. Balance: 4 ammo pickups in 4-player games
+
+- `board.ts`'s `buildBoard()` hardcodes `.slice(0, 3)` for ammo pickups from an 8-cell central pool (dead code constant `AMMO_PICKUP_COUNT` is unused today). Add a `playerCount: number = 2` parameter to `buildBoard`; pick `playerCount >= 4 ? 4 : 3` cells (still ≤ 8 available, no pool-size issue). Wire the one call site (`state.ts`'s `createInitialGameState`) to pass its existing `playerCount` through. Remove the now-provably-dead `AMMO_PICKUP_COUNT` constant or wire it in as the 2-player value — prefer replacing both magic numbers with named constants (`AMMO_PICKUP_COUNT_DEFAULT = 3`, `AMMO_PICKUP_COUNT_4P = 4`) for consistency with `visionRadiusForCount`'s existing pattern.
+
+## 7. Auto-delist abandoned public rooms
+
+- **Problem:** a public room is only unregistered from the lobby list when `OnlineSession` cleanly unmounts (`useLobbyRegistration`'s effect cleanup) or the game starts. If the last remaining player in a still-in-lobby public room closes the tab/browser without a clean unmount (network drop, hard close), the room lingers in the public list forever with no way to join it (seats show disconnected but the room is never removed).
+- **Fix:** server-side safety net. In `server.ts`'s `ScavengersServer`, after `roomReduce` processes a `disconnect`, check whether the resulting model has zero connected slots AND `phase === 'lobby'`. If so, call the `LobbyServer` Durable Object directly (via `this.env.LobbyServer.get(this.env.LobbyServer.idFromName('lobby'))` RPC stub) to unregister this room's code (`this.name`, the room's own DO name). Add a public method to `LobbyServer` (e.g. `unregisterRoom(code: string)`) that runs the existing `lobbyReduce({ t: 'unregister', code })` step and broadcasts the updated `rooms` list to anyone currently connected to the lobby party (so open Join screens update live, not just on next refresh). This is additive — the existing client-driven register/unregister on mount/unmount/phase-change is untouched and still the common path; this is purely a server-side backstop for the ungraceful-disconnect case.
+
+## Testing
+
+- Engine: `board.test.ts` gets cases for `buildBoard(4)` producing 4 ammo pickups (and confirms `buildBoard(2)`/`buildBoard()` still produce 3, unaffected).
+- `roomReducer.test.ts` (existing suite, wherever action-reducer tests live) gets cases for: `setName` updates the roster entry and is idempotent/rejects unseated connections; `startGame` picks a `currentTurn` that is a member of `turnOrder` (can't assert exact randomness deterministically, but can assert the invariant across many seeded runs, or inject a seedable RNG — see Open Question below).
+- `lobbyReducer.test.ts` gets a case for the new `unregisterRoom`-triggering path if it's expressed as a reducer input rather than a raw DO method (see Open Question).
+- UI: no component tests (matches project convention) — verified via `npm run build` + full suite + manual preview playtest (menu restyle, popups, rename, room-code display, host-reorder, ammo count in a 4p match, random-turn reveal, per-viewer kill phrasing) the same way the online-orchestrator slice was verified.
+
+## Open Questions (resolved inline, recorded for the plan)
+
+- **RNG seams for `startGame`'s random pick:** `roomReducer.ts` is a pure reducer today (fully testable without mocking `Math.random`). To keep it testable, inject randomness the same way `board.ts` already does (`Math.random()` inline) rather than threading a seed through — tests will assert the *invariant* (chosen id ∈ turnOrder) across repeated calls rather than an exact value, consistent with how `board.ts`'s existing shuffle is tested today (check `board.test.ts` for the established pattern before writing new tests).
+- **Lobby DO cross-call shape:** implemented as a public async method on the `LobbyServer` class (Cloudentity/Cloudflare Durable Object RPC), not a new wire message — it's a server-internal call, not something a browser client ever sends.
