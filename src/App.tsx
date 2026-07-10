@@ -31,6 +31,8 @@ import { Leaderboard } from './components/Leaderboard';
 import { Lives } from './components/Lives';
 import { ControlPanel, type Flow, type AttackType, type Capabilities } from './components/ControlPanel';
 import { MenuFlow } from './components/menu/MenuFlow';
+import type { EnterRoomConfig } from './components/menu/MenuFlow';
+import { OnlineSession } from './online/OnlineSession';
 import { theme } from './theme';
 import {
   type AnimFrame,
@@ -93,8 +95,10 @@ function useCellSize(): number {
   return size;
 }
 
+type Route = { kind: 'menu' } | { kind: 'game' } | { kind: 'online'; roomId: string; create?: EnterRoomConfig['create'] };
+
 function App() {
-  const [screen, setScreen] = useState<'menu' | 'game'>('menu');
+  const [route, setRoute] = useState<Route>({ kind: 'menu' });
   const [mode, setMode] = useState<GameMode>('lastStanding');
   const [state, setState] = useState<GameState>(() => createInitialGameState('lastStanding', 2));
   const [display, setDisplay] = useState<GameState>(state);
@@ -196,7 +200,7 @@ function App() {
   const backToMenu = () => {
     clearTimers();
     setPhase('playing');
-    setScreen('menu');
+    setRoute({ kind: 'menu' });
   };
 
   const canPunch = me.energy >= PUNCH_ENERGY_COST;
@@ -893,13 +897,25 @@ function App() {
   }
 
   // ---- Menu (game-type → settings → online lobby) ----
-  if (screen === 'menu') {
+  if (route.kind === 'menu') {
     return (
       <MenuFlow
         onStartGame={(nextMode, count) => {
           startGame(nextMode, count);
-          setScreen('game');
+          setRoute({ kind: 'game' });
         }}
+        onEnterRoom={(config) => setRoute({ kind: 'online', roomId: config.roomId, create: config.create })}
+      />
+    );
+  }
+
+  // ---- Online route ----
+  if (route.kind === 'online') {
+    return (
+      <OnlineSession
+        roomId={route.roomId}
+        create={route.create}
+        onLeave={() => setRoute({ kind: 'menu' })}
       />
     );
   }
