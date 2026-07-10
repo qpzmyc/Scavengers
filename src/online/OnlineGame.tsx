@@ -207,9 +207,14 @@ export function OnlineGame({ room, onLeave, isHost }: { room: OnlineRoom; onLeav
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [room.state, room.lastEvent]);
 
-  // Surface room.error as a toast.
+  // Surface room.error as a toast, and clear the pending-send lock: a rejected
+  // action produces an `error` with NO `state` broadcast, so without this the
+  // "Resolving…" gate (`sending`) would stick forever and lock the player out.
   useEffect(() => {
-    if (room.error) pushActionNotice(room.error, 'warning');
+    if (room.error) {
+      pushActionNotice(room.error, 'warning');
+      setSending(false);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [room.error]);
 

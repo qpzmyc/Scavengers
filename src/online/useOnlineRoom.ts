@@ -67,11 +67,15 @@ export function useOnlineRoom(roomId: string, create?: { mode: GameMode; count: 
           setState(msg.state);
           setPhase('playing');
           setLastEvent(null);
+          setError(null);
           break;
         case 'state':
           setState(msg.state);
           setLastEvent(msg.event);
           setPhase(msg.state.winner !== null ? 'over' : 'playing');
+          // A successful broadcast clears any prior rejection, so a later identical
+          // rejection re-fires the consumer's [error] effect (which also re-unlocks).
+          setError(null);
           break;
         case 'paused':
           setPhase('paused');
