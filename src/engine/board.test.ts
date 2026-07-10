@@ -55,6 +55,28 @@ describe('buildBoard', () => {
     expect(ammoInCentral).toBe(3);
   });
 
+  it('places 3 ammo pickups by default (2-player games)', () => {
+    const board = buildBoard();
+    let ammoCount = 0;
+    for (const row of board) {
+      for (const tile of row) {
+        if (tile.type === 'ammoPickup') ammoCount += 1;
+      }
+    }
+    expect(ammoCount).toBe(3);
+  });
+
+  it('places 4 ammo pickups in 4-player games', () => {
+    const board = buildBoard(4);
+    let ammoCount = 0;
+    for (const row of board) {
+      for (const tile of row) {
+        if (tile.type === 'ammoPickup') ammoCount += 1;
+      }
+    }
+    expect(ammoCount).toBe(4);
+  });
+
   it('never places an ammo pickup on the center wall cell', () => {
     const board = buildBoard();
     expect(getTile(board, { x: 5, y: 5 }).type).toBe('wall');

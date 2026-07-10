@@ -1,6 +1,6 @@
 import type { GameState, PlayerId, Position } from './types';
 import { isInBounds, isWall, getTile } from './board';
-import { MAX_MOVE_TILES, MOVE_ENERGY_COST_PER_TILE, REST_ENERGY_GAIN, ENERGY_PICKUP_VALUE, MAX_ENERGY, MAX_AMMO, GRID_SIZE, PICKUP_RESPAWN_PLIES } from './constants';
+import { maxMoveTilesForCount, MOVE_ENERGY_COST_PER_TILE, REST_ENERGY_GAIN, ENERGY_PICKUP_VALUE, MAX_ENERGY, MAX_AMMO, GRID_SIZE, PICKUP_RESPAWN_PLIES } from './constants';
 
 function isAdjacentStep(from: Position, to: Position): boolean {
   const dx = Math.abs(to.x - from.x);
@@ -9,8 +9,9 @@ function isAdjacentStep(from: Position, to: Position): boolean {
 }
 
 export function movePlayer(state: GameState, playerId: PlayerId, path: Position[]): GameState {
-  if (path.length === 0 || path.length > MAX_MOVE_TILES) {
-    throw new Error(`Path must be 1-${MAX_MOVE_TILES} tiles, got ${path.length}`);
+  const maxTiles = maxMoveTilesForCount(state.turnOrder.length);
+  if (path.length === 0 || path.length > maxTiles) {
+    throw new Error(`Path must be 1-${maxTiles} tiles, got ${path.length}`);
   }
 
   const player = state.players[playerId];

@@ -8,8 +8,14 @@ export const MAX_AMMO = 3;
 export const START_AMMO = 1;
 
 export const MOVE_ENERGY_COST_PER_TILE = 1;
-export const MAX_MOVE_TILES = 2;
+export const MAX_MOVE_TILES_DEFAULT = 2;
+export const MAX_MOVE_TILES_2P = 3; // 2-player games get an extra step of mobility
 export const REST_ENERGY_GAIN = 3;
+
+// Max move-path length for a game with `playerCount` players.
+export function maxMoveTilesForCount(playerCount: number): number {
+  return playerCount === 2 ? MAX_MOVE_TILES_2P : MAX_MOVE_TILES_DEFAULT;
+}
 export const ENERGY_PICKUP_VALUE = 5;
 
 export const PHANTOM_ENERGY_COST = 2;
@@ -21,7 +27,14 @@ export const BOMB_AMMO_COST = 2;
 export const ATTACK_MAX_REPOSITION = 1;
 
 export const ENERGY_PICKUP_COUNT = 4;
-export const AMMO_PICKUP_COUNT = 3;
+export const AMMO_PICKUP_COUNT_DEFAULT = 3; // 2-player games
+export const AMMO_PICKUP_COUNT_4P = 4; // 4-player games
+
+// Ammo pickup count for a game with `playerCount` players.
+export function ammoPickupCountForCount(playerCount: number): number {
+  return playerCount >= 4 ? AMMO_PICKUP_COUNT_4P : AMMO_PICKUP_COUNT_DEFAULT;
+}
+
 export const PICKUP_RESPAWN_PLIES = 4;
 
 export const RESPAWN_IMMUNITY_TURNS = 2;
