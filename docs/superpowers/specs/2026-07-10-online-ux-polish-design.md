@@ -33,7 +33,17 @@
 ## 5. Turn-text and per-viewer notification phrasing (online only)
 
 - **Bug fix:** `ResourceBars` hardcodes `"— your turn"` unconditionally. Add a `showTurnLabel: boolean` prop; `OnlineGame` passes `myTurn` (already computed at `OnlineGame.tsx:287`); hotseat's `App.tsx` call site passes `true` (it only ever renders this component during the viewing player's own turn already, so behavior is unchanged).
-- **Per-viewer kill/action phrasing:** today `OnlineGame`'s kill message (`killMsg`, `OnlineGame.tsx:192-195`) is identical for every viewer and never names the actor. Change: if `event.actorId === viewerId`, keep today's phrasing (acting player already knows it's them: `"Bombed RED!"`); otherwise prefix with the actor's display name: `"GREEN bombed RED!"` (lowercase verb when prefixed, since it's mid-sentence). Same treatment applies to the floating kill-notification chips (`notifications` state) if they currently omit the actor — check `killerName`/`killerColor` usage in the notification renderer and ensure the actor is visible there for non-actor viewers too.
+- **Per-viewer kill/action phrasing (revised — supersedes an earlier draft of this section):** every notification always names both the actor and the victim, from every viewer's seat — the only thing that varies per viewer is that *your own* identity, whether as actor or victim, is replaced with "You"/"you". No more actor-omitted phrasing at all, even for the acting player.
+  - Build phrasing from a single helper, e.g. `describe(playerId, viewerId, displayName)`: returns `'You'` (capital, sentence-initial) or `'you'` (lowercase, mid-sentence) when `playerId === viewerId`, otherwise the player's display name (custom name or `color.toUpperCase()`/title-case, matching however names are cased elsewhere).
+  - **Self-inflicted kill (actor === victim, e.g. a phantom-crush or self-bomb if the engine allows it):** special-cased wording, not "You crushed you": `"You crushed yourself!"` when viewing as the actor, `"Ellie crushed themselves!"` when viewing as any other player (third person, singular "themselves" regardless of the victim's actual identity — no gendered pronouns in this codebase, so "themselves" is the fixed form).
+  - **Normal kill (actor ≠ victim):** four cases depending on the viewer's relation to each side, e.g. for a bomb:
+    - Viewer is the actor: `"You bombed Carl!"` (or `"You bombed Violet, Carl!"` for multi-victim attacks — reuse the existing comma-joined victim-list logic, just running each name through `describe`).
+    - Viewer is a victim: `"Violet bombed you!"`
+    - Viewer is neither: `"Violet bombed Carl!"`
+    - (Actor-is-viewer and victim-is-viewer can't both be true here since actor ≠ victim in this branch.)
+  - Verb casing: sentence-initial when the sentence starts with "You" or a name (both are always capitalized at sentence-start), so the existing `verb[0].toUpperCase() + verb.slice(1)` capitalization is unconditional now (it no longer depends on whether the actor was previously omitted).
+  - Applies uniformly to: the toast/notice text (`killMsg`, `OnlineGame.tsx:192-195`) and the floating kill-notification chips (`notifications` state / `killerName`/`victimName` fields) — both are viewer-local renders already, so both re-derive their text through the same `describe`-based helper per viewer.
+  - Non-kill notices that reference a specific other player (if any exist today — e.g. immune/phantom notices) get the same "You" substitution treatment when they name a player, for consistency; notices that are purely about the local player's own resource/legality errors (e.g. "Not enough energy to move.") are unaffected since they never named anyone.
 
 ## 6. Balance: 4 ammo pickups in 4-player games
 
