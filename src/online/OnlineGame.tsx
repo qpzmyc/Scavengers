@@ -101,15 +101,19 @@ export function OnlineGame({ room, onLeave, isHost }: { room: OnlineRoom; onLeav
 
   // Random-first-turn reveal overlay: runs once on mount (which always coincides with a
   // fresh gameStart, since OnlineSession only mounts OnlineGame once phase leaves 'lobby'
-  // and keeps the same instance across pause/resume).
+  // and keeps the same instance across pause/resume). `room.state` is already non-null by
+  // the time this component mounts (OnlineSession only renders it once phase !== 'lobby'),
+  // so an empty dependency array is correct here — and required: a ref-guarded `[room.state]`
+  // effect breaks under StrictMode's mount→cleanup→remount, since the cleanup from the first
+  // (dev-only) invocation cancels the timers and the guard then blocks the second invocation
+  // from re-arming them, leaving the overlay stuck forever.
   const [revealing, setRevealing] = useState(true);
   const [highlightId, setHighlightId] = useState<PlayerId | null>(null);
-  const revealStartedRef = useRef(false);
 
   useEffect(() => {
-    if (revealStartedRef.current || !room.state) return;
-    revealStartedRef.current = true;
-    const order = room.state.turnOrder;
+    const initialState = room.state;
+    if (!initialState) return;
+    const order = initialState.turnOrder;
     let i = 0;
     setHighlightId(order[0]);
     const interval = window.setInterval(() => {
@@ -118,15 +122,16 @@ export function OnlineGame({ room, onLeave, isHost }: { room: OnlineRoom; onLeav
     }, 120);
     const stop = window.setTimeout(() => {
       window.clearInterval(interval);
-      setHighlightId(room.state!.currentTurn);
-      window.setTimeout(() => setRevealing(false), 500);
+      setHighlightId(initialState.currentTurn);
     }, 1500);
+    const dismiss = window.setTimeout(() => setRevealing(false), 2000);
     return () => {
       window.clearInterval(interval);
       window.clearTimeout(stop);
+      window.clearTimeout(dismiss);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [room.state]);
+  }, []);
 
   const prevStateRef = useRef<GameState | null>(null);
   const processedEventRef = useRef<ActionEvent | null>(null);

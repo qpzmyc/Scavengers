@@ -52,7 +52,7 @@ export function OnlineSession({
 
   const row: LobbyRow | null =
     create?.visibility === 'public'
-      ? { code: roomId, mode: room.mode, playerCount: room.playerCount, filled: room.roster.length }
+      ? { code: roomId, mode: room.mode, playerCount: room.playerCount, filled: room.roster.filter((r) => r.connected).length }
       : null;
   useLobbyRegistration(row, room.phase === 'lobby');
 
@@ -97,8 +97,10 @@ export function OnlineSession({
 
   // Display-only reorder: the current host's row goes first. Underlying seat/turn order
   // (room.roster's index, which mirrors p1..pN) is untouched — this only affects rendering.
+  // room.roster always has one entry per seat (playerCount), connected or not — a seat's
+  // `connected` flag, not its presence in the array, is what distinguishes an empty slot.
   const orderedRoster = [...room.roster].sort((a, b) => (b.isHost ? 1 : 0) - (a.isHost ? 1 : 0));
-  const emptySlotCount = room.playerCount - room.roster.length;
+  const connectedCount = room.roster.filter((r) => r.connected).length;
 
   return (
     <div style={screenWrap}>
@@ -122,6 +124,22 @@ export function OnlineSession({
       <div style={{ ...card, padding: 24, minWidth: 360, display: 'flex', flexDirection: 'column', gap: 12 }}>
         <div style={rowLabel}>Players ({room.playerCount} max)</div>
         {orderedRoster.map((entry) => {
+          if (!entry.connected) {
+            return (
+              <div
+                key={entry.playerId}
+                style={{
+                  padding: '12px 16px',
+                  borderRadius: 8,
+                  background: theme.surfaceAlt,
+                  color: theme.textMuted,
+                  fontWeight: 600,
+                }}
+              >
+                Waiting for player…
+              </div>
+            );
+          }
           const isMe = entry.playerId === room.myPlayerId;
           return (
             <div
@@ -167,20 +185,6 @@ export function OnlineSession({
             </div>
           );
         })}
-        {Array.from({ length: Math.max(0, emptySlotCount) }, (_, i) => (
-          <div
-            key={`empty-${i}`}
-            style={{
-              padding: '12px 16px',
-              borderRadius: 8,
-              background: theme.surfaceAlt,
-              color: theme.textMuted,
-              fontWeight: 600,
-            }}
-          >
-            Waiting for player…
-          </div>
-        ))}
       </div>
       <div style={{ textAlign: 'center' }}>
         <div style={rowLabel}>Room code</div>
@@ -188,8 +192,8 @@ export function OnlineSession({
       </div>
       {isHost ? (
         <button
-          style={{ ...primaryBtn, opacity: room.roster.length < room.playerCount ? 0.5 : 1 }}
-          disabled={room.roster.length < room.playerCount}
+          style={{ ...primaryBtn, opacity: connectedCount < room.playerCount ? 0.5 : 1 }}
+          disabled={connectedCount < room.playerCount}
           onClick={() => room.send({ type: 'startGame' })}
         >
           Start Game
