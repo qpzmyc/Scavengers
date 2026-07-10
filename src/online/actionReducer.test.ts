@@ -82,6 +82,27 @@ describe('applyAction', () => {
     expect(res.ok).toBe(false);
   });
 
+  it('reports phantomHitPlayerIds when an attack tags an enemy decoy but misses their real position', () => {
+    let state = createInitialGameState('deathmatch', 2); // currentTurn p1
+    state = withPlayerAt(state, 'p1', { x: 5, y: 5 });
+    state = withEmptyTile(state, { x: 6, y: 5 });
+    // p2's REAL tile is far away (safe), but their phantom DISPLAY sits on p1's shot ray.
+    state = withPlayerAt(state, 'p2', { x: 0, y: 10 });
+    state = {
+      ...state,
+      players: {
+        ...state.players,
+        p2: { ...state.players.p2, isPhantom: true, phantomDisplayPosition: { x: 6, y: 5 } },
+      },
+    };
+    const res = applyAction(state, 'p1', { kind: 'attack', type: 'shoot', path: [], target: { x: 6, y: 5 } });
+    expect(res.ok).toBe(true);
+    if (res.ok) {
+      expect(res.event.killedPlayerIds).toEqual([]); // real position not hit
+      expect(res.event.phantomHitPlayerIds).toContain('p2');
+    }
+  });
+
   it('crushing an enemy phantom on the move path grants NO extra turn (turn passes)', () => {
     let state = createInitialGameState('deathmatch', 2); // currentTurn p1
     state = withPlayerAt(state, 'p1', { x: 5, y: 5 });

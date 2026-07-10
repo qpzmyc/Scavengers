@@ -39,7 +39,10 @@ import {
 import type { OnlineRoom } from './useOnlineRoom';
 import { buildOnlineFrames } from './buildOnlineFrames';
 import { flowToRequest } from './flowToRequest';
+import { ConfirmDialog } from '../components/ConfirmDialog';
 import type { ActionEvent } from './protocol';
+import type { EnterRoomConfig } from '../components/menu/MenuFlow';
+import { generateRoomCode } from './roomCode';
 
 // Renders a message, tinting any word that names a player (by custom name or color) with
 // that player's color.
@@ -82,13 +85,24 @@ function useCellSize(): number {
   return size;
 }
 
-export function OnlineGame({ room, onLeave, isHost }: { room: OnlineRoom; onLeave: () => void; isHost: boolean }) {
+export function OnlineGame({
+  room,
+  onLeave,
+  onEnterRoom,
+  isHost,
+}: {
+  room: OnlineRoom;
+  onLeave: () => void;
+  onEnterRoom: (config: EnterRoomConfig) => void;
+  isHost: boolean;
+}) {
   const [flow, setFlow] = useState<Flow>({ kind: 'menu' });
   const [display, setDisplay] = useState<GameState | null>(room.state);
   const [redTints, setRedTints] = useState<RedTint[]>([]);
   const [deathAnims, setDeathAnims] = useState<DeathAnim[]>([]);
   const [animating, setAnimating] = useState(false);
   const [sending, setSending] = useState(false);
+  const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
   const cellSize = useCellSize();
 
   const [notifications, setNotifications] = useState<
@@ -109,6 +123,30 @@ export function OnlineGame({ room, onLeave, isHost }: { room: OnlineRoom; onLeav
   // from re-arming them, leaving the overlay stuck forever.
   const [revealing, setRevealing] = useState(true);
   const [highlightId, setHighlightId] = useState<PlayerId | null>(null);
+  const [revealLanded, setRevealLanded] = useState(false);
+
+  // Win sequence: fade to black slowly, then reveal the win screen.
+  const winnerId = room.state?.winner ?? null;
+  const [winFadeIn, setWinFadeIn] = useState(false);
+  const [winScreen, setWinScreen] = useState(false);
+  const [winContentIn, setWinContentIn] = useState(false);
+  useEffect(() => {
+    // Wait for the kill/death animation to finish playing before starting the fade,
+    // so the win screen never covers a still-animating board. Then the board fades to
+    // black over 5s, and only after that does the win screen fade in over 3s.
+    if (winnerId === null || animating) return;
+    const t1 = window.setTimeout(() => setWinFadeIn(true), 50);
+    const t2 = window.setTimeout(() => setWinScreen(true), 5050);
+    const t3 = window.setTimeout(() => setWinContentIn(true), 5100);
+    return () => { window.clearTimeout(t1); window.clearTimeout(t2); window.clearTimeout(t3); };
+  }, [winnerId, animating]);
+
+  // The host's "End Match" (from the reconnecting screen) ends the game with no winner;
+  // send everyone back to the menu instead of leaving them on a blank over-state screen.
+  useEffect(() => {
+    if (room.phase === 'over' && room.state && room.state.winner === null) onLeave();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [room.phase]);
 
   useEffect(() => {
     const initialState = room.state;
@@ -120,11 +158,14 @@ export function OnlineGame({ room, onLeave, isHost }: { room: OnlineRoom; onLeav
       i = (i + 1) % order.length;
       setHighlightId(order[i]);
     }, 120);
+    // Cycle for a while, then land on the chosen player and hold them highlighted for
+    // a couple seconds so it's clear who was picked before the game begins.
     const stop = window.setTimeout(() => {
       window.clearInterval(interval);
       setHighlightId(initialState.currentTurn);
-    }, 1500);
-    const dismiss = window.setTimeout(() => setRevealing(false), 2000);
+      setRevealLanded(true);
+    }, 2800);
+    const dismiss = window.setTimeout(() => setRevealing(false), 5000);
     return () => {
       window.clearInterval(interval);
       window.clearTimeout(stop);
@@ -192,7 +233,7 @@ export function OnlineGame({ room, onLeave, isHost }: { room: OnlineRoom; onLeav
   const nameFor = (id: PlayerId): string => {
     const entry = room.roster.find((r) => r.playerId === id);
     const color = room.state?.players[id].color ?? '';
-    return entry?.name || color;
+    return entry?.name || color.toUpperCase();
   };
   // Renders a player for viewer-aware notification text: the viewer sees "You"/"you"
   // (capitalized only when sentenceStart is true) for themselves, and nameFor(id) otherwise.
@@ -225,31 +266,51 @@ export function OnlineGame({ room, onLeave, isHost }: { room: OnlineRoom; onLeav
       const req = event.request;
       const verb = req.kind === 'move' ? 'crushed' : req.kind === 'attack' ? attackVerb[req.type] : null;
       if (verb) {
-        setNotifications((list) => {
-          const additions = event.killedPlayerIds.map((victimId) => ({
-            id: notificationIdRef.current++,
-            killerId: event.actorId,
-            victimId,
-            verb,
-          }));
-          return [...list, ...additions];
-        });
-
-        const selfKill = event.killedPlayerIds.length === 1 && event.killedPlayerIds[0] === event.actorId;
-        let killMsg: string;
-        if (selfKill) {
-          killMsg =
-            event.actorId === room.myPlayerId
-              ? `You ${verb} yourself!`
-              : `${nameFor(event.actorId)} ${verb} themselves!`;
-        } else {
-          const subject = describe(event.actorId, true);
-          const victims = event.killedPlayerIds.map((id) => describe(id, false)).join(', ');
-          const suffix = after.winner === null && verb !== 'crushed' ? ' — +1 extra turn!' : '!';
-          killMsg = `${subject} ${verb} ${victims}${suffix}`;
+        // Hold the kill notifications until the death actually lands in the animation
+        // (the first frame that carries a death fade) instead of firing the instant the
+        // confirmed action arrives — otherwise "X killed Y" shows before the hit plays.
+        let deathDelay = 0;
+        for (const f of frames) {
+          if (f.death.length) break;
+          deathDelay += f.holdMs;
         }
-        pushActionNotice(killMsg, 'kill');
+        const emitKillNotices = () => {
+          setNotifications((list) => {
+            const additions = event.killedPlayerIds.map((victimId) => ({
+              id: notificationIdRef.current++,
+              killerId: event.actorId,
+              victimId,
+              verb,
+            }));
+            return [...list, ...additions];
+          });
+
+          const selfKill = event.killedPlayerIds.length === 1 && event.killedPlayerIds[0] === event.actorId;
+          let killMsg: string;
+          if (selfKill) {
+            killMsg =
+              event.actorId === room.myPlayerId
+                ? `You ${verb} yourself!`
+                : `${nameFor(event.actorId)} ${verb} themselves!`;
+          } else {
+            const subject = describe(event.actorId, true);
+            const victims = event.killedPlayerIds.map((id) => describe(id, false)).join(', ');
+            const suffix = after.winner === null && verb !== 'crushed' ? ' — +1 extra turn!' : '!';
+            killMsg = `${subject} ${verb} ${victims}${suffix}`;
+          }
+          pushActionNotice(killMsg, 'kill');
+        };
+        if (deathDelay > 0) schedule(deathDelay, emitKillNotices);
+        else emitKillNotices();
       }
+    }
+
+    if (event.phantomHitPlayerIds.length) {
+      const subject = describe(event.actorId, true);
+      const targets = event.phantomHitPlayerIds
+        .map((id) => (id === room.myPlayerId ? 'your' : `${nameFor(id)}'s`))
+        .join(', ');
+      pushActionNotice(`${subject} hit ${targets} Phantom!`, 'phantom');
     }
 
     setAnimating(true);
@@ -341,7 +402,9 @@ export function OnlineGame({ room, onLeave, isHost }: { room: OnlineRoom; onLeav
   const others = state.turnOrder.filter((id) => id !== viewerId).map((id) => state.players[id]);
   const myTurn = state.currentTurn === viewerId;
   const gameOver = state.winner !== null;
-  const interactive = myTurn && !animating && !sending && room.phase === 'playing' && state.winner === null;
+  // `revealing` gates interactivity too: showing the chosen player's action panel during
+  // the first-turn reveal would leak who was picked before the animation finishes.
+  const interactive = myTurn && !animating && !sending && !revealing && room.phase === 'playing' && state.winner === null;
   const nameColorMap = new Map<string, string>(
     state.turnOrder.map((id) => [nameFor(id).toLowerCase(), state.players[id].color] as const)
   );
@@ -628,8 +691,8 @@ export function OnlineGame({ room, onLeave, isHost }: { room: OnlineRoom; onLeav
             gap: 24,
           }}
         >
-          <div style={{ fontSize: 18, color: theme.textMuted, fontWeight: 600, letterSpacing: 1 }}>
-            Choosing first turn…
+          <div style={{ fontSize: revealLanded ? 24 : 18, color: revealLanded ? theme.heading : theme.textMuted, fontWeight: 700, letterSpacing: 1, transition: 'all 0.2s ease' }}>
+            {revealLanded ? <>{renderColoredText(nameFor(highlightId), nameColorMap)} goes first!</> : 'Choosing first turn…'}
           </div>
           <div style={{ display: 'flex', gap: 18 }}>
             {state.turnOrder.map((id) => (
@@ -650,15 +713,91 @@ export function OnlineGame({ room, onLeave, isHost }: { room: OnlineRoom; onLeav
           </div>
         </div>
       )}
+      {winnerId !== null && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: '#000',
+            zIndex: 600,
+            opacity: winFadeIn ? 1 : 0,
+            transition: 'opacity 5s ease',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 28,
+            padding: 24,
+            boxSizing: 'border-box',
+            pointerEvents: winScreen ? 'auto' : 'none',
+          }}
+        >
+          {winScreen && (
+            <div
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                gap: 28,
+                opacity: winContentIn ? 1 : 0,
+                transition: 'opacity 3s ease',
+              }}
+            >
+              <h1 style={{ fontSize: 48, margin: 0, textAlign: 'center' }}>
+                {renderColoredText(nameFor(winnerId), nameColorMap)} Wins!
+              </h1>
+              <div style={{ transform: 'scale(1.1)', transformOrigin: 'top center' }}>
+                {state.mode === 'lastStanding' ? <Lives state={state} displayName={nameFor} /> : <Leaderboard state={state} displayName={nameFor} />}
+              </div>
+              <button
+                onClick={() => {
+                  // The first click mints the rematch room and sends everyone else its code
+                  // via the room's roster broadcast; later clicks (from this player or
+                  // others) just follow that code. Whoever was host of THIS match rejoins
+                  // as `becomeHost` so host status always ends up back with them, even
+                  // though the temp host (first clicker) is the one who actually created
+                  // the fresh room.
+                  const code = room.successorRoomCode ?? generateRoomCode();
+                  if (!room.successorRoomCode) room.send({ type: 'backToLobby', roomCode: code });
+                  const seat = room.myPlayerId ?? undefined;
+                  onEnterRoom(
+                    room.successorRoomCode
+                      ? { roomId: code, becomeHost: isHost, seat }
+                      : {
+                          roomId: code,
+                          create: { mode: room.mode, count: room.playerCount, visibility: room.visibility, deathCap: room.deathCap, targetScore: room.targetScore },
+                          becomeHost: isHost,
+                          seat,
+                        },
+                  );
+                }}
+                style={{
+                  marginTop: 8,
+                  padding: '14px 32px',
+                  fontSize: 18,
+                  fontWeight: 700,
+                  background: theme.accent,
+                  border: `1px solid ${theme.accent}`,
+                  color: '#fff',
+                  borderRadius: 10,
+                  cursor: 'pointer',
+                }}
+              >
+                Back to Lobby
+              </button>
+            </div>
+          )}
+        </div>
+      )}
       {noticeStack}
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, marginBottom: 20, flexWrap: 'wrap' }}>
         <h1 style={{ fontSize: 26 }}>Scavengers</h1>
         <span style={{ color: theme.textMuted, fontSize: 13 }}>
-          {state.mode === 'lastStanding' ? 'Last Standing' : 'Deathmatch'}
+          {state.mode === 'lastStanding' ? 'Survival' : 'Deathmatch'}
         </span>
         <div style={{ marginLeft: 'auto' }}>
           <button
-            onClick={onLeave}
+            onClick={() => setShowLeaveConfirm(true)}
             style={{
               padding: '6px 12px',
               fontSize: 12,
@@ -674,33 +813,21 @@ export function OnlineGame({ room, onLeave, isHost }: { room: OnlineRoom; onLeav
           </button>
         </div>
       </div>
+      {showLeaveConfirm && (
+        <ConfirmDialog
+          title="Leave game?"
+          message="Are you sure you want to leave this game?"
+          confirmLabel="Leave game"
+          onConfirm={() => { setShowLeaveConfirm(false); onLeave(); }}
+          onCancel={() => setShowLeaveConfirm(false)}
+        />
+      )}
 
       <div style={{ display: 'flex', gap: 24, alignItems: 'flex-start', justifyContent: 'center', flexWrap: 'wrap' }}>
-        {state.mode === 'lastStanding' ? <Lives state={state} /> : <Leaderboard state={state} displayName={nameFor} />}
+        {state.mode === 'lastStanding' ? <Lives state={state} displayName={nameFor} /> : <Leaderboard state={state} displayName={nameFor} />}
 
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}>
-          {gameOver || room.phase === 'over' ? (
-            <div style={{ width: columnWidth, boxSizing: 'border-box', padding: '12px 16px', borderRadius: theme.radius, background: theme.accentSoft, color: theme.accentText, fontWeight: 700, textAlign: 'center', display: 'flex', flexDirection: 'column', gap: 10, alignItems: 'center' }}>
-              <span>Player {state.players[state.winner!].color.toUpperCase()} wins!</span>
-              <button
-                onClick={onLeave}
-                style={{
-                  padding: '8px 18px',
-                  fontSize: 13,
-                  fontWeight: 600,
-                  borderRadius: 8,
-                  background: theme.accent,
-                  border: `1px solid ${theme.accent}`,
-                  color: '#fff',
-                  cursor: 'pointer',
-                }}
-              >
-                Back to Menu
-              </button>
-            </div>
-          ) : (
-            <ResourceBars player={me} width={columnWidth} preview={preview} showTurnLabel={myTurn} displayName={nameFor(viewerId)} />
-          )}
+          <ResourceBars player={me} width={columnWidth} preview={preview} showTurnLabel={myTurn && !animating && !revealing} displayName={nameFor(viewerId)} />
 
           <div style={{ position: 'relative' }}>
             <Board
@@ -721,7 +848,9 @@ export function OnlineGame({ room, onLeave, isHost }: { room: OnlineRoom; onLeav
           </div>
 
           <div style={{ ...card, width: columnWidth, boxSizing: 'border-box' }}>
-            {statusText ? (
+            {revealing ? (
+              <div style={{ padding: 16, color: theme.textMuted, fontStyle: 'italic' }}>Choosing first turn…</div>
+            ) : statusText ? (
               <div style={{ padding: 16, color: theme.textMuted, fontStyle: 'italic' }}>{statusText}</div>
             ) : (
               <ControlPanel

@@ -42,7 +42,14 @@ export function Leaderboard({ state, displayName }: LeaderboardProps) {
         minWidth: 240,
       }}
     >
-      <h3 style={{ marginBottom: 10, fontSize: 15 }}>Leaderboard</h3>
+      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 10 }}>
+        <h3 style={{ fontSize: 15, margin: 0 }}>Leaderboard</h3>
+        {showScore && (
+          <span style={{ fontSize: 12, fontWeight: 700, color: theme.accentText }}>
+            Target: {state.targetScore}
+          </span>
+        )}
+      </div>
       <table style={{ borderCollapse: 'collapse', width: '100%' }}>
         <thead>
           <tr>

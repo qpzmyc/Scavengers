@@ -36,6 +36,62 @@ describe('roomReduce', () => {
     expect(started.out.some((o) => o.to === 'all' && o.msg.type === 'gameStart')).toBe(true);
   });
 
+  it('kicks a player: frees their seat, notifies them, and rejects non-host kicks', () => {
+    const seated = seatedTwo();
+    // Non-host cannot kick.
+    const denied = roomReduce(seated, { t: 'kickPlayer', connId: 'B', playerId: 'p1' });
+    expect(denied.out).toContainEqual({ to: { connId: 'B' }, msg: { type: 'error', message: expect.stringMatching(/host/i) } });
+    expect(denied.model.slots[0].connId).toBe('A');
+
+    // Host kicks p2: seat is fully freed and the kicked conn gets a 'kicked' message.
+    const kicked = roomReduce(seated, { t: 'kickPlayer', connId: 'A', playerId: 'p2' });
+    const p2 = kicked.model.slots[1];
+    expect(p2.connId).toBeNull();
+    expect(p2.connected).toBe(false);
+    expect(p2.token).toBeNull();
+    expect(p2.name).toBeNull();
+    expect(kicked.out).toContainEqual({ to: { connId: 'B' }, msg: { type: 'kicked' } });
+  });
+
+  it('backToLobby sets the successor room code on the first click and ignores later clicks', () => {
+    let m = seatedTwo();
+    m = roomReduce(m, { t: 'startGame', connId: 'A' }).model;
+    m = { ...m, phase: 'over' };
+    const first = roomReduce(m, { t: 'backToLobby', connId: 'A', roomCode: 'ROOM01' });
+    expect(first.model.successorRoomCode).toBe('ROOM01');
+    expect(first.out).toContainEqual({ to: 'all', msg: expect.objectContaining({ type: 'roster', successorRoomCode: 'ROOM01' }) });
+
+    // A later click (even with a different code) is a no-op — everyone rendezvouses at the first code.
+    const second = roomReduce(first.model, { t: 'backToLobby', connId: 'B', roomCode: 'ROOM02' });
+    expect(second.model.successorRoomCode).toBe('ROOM01');
+    expect(second.out).toEqual([]);
+  });
+
+  it('a join with becomeHost transfers host to the joiner even though they are not the first seat', () => {
+    let m = roomInit('deathmatch', 2);
+    m = roomReduce(m, { t: 'join', connId: 'A', issueToken: 'tokA' }).model; // A is host (first seat)
+    const step = roomReduce(m, { t: 'join', connId: 'B', issueToken: 'tokB', becomeHost: true });
+    expect(step.model.hostConnId).toBe('B');
+  });
+
+  it('a join takes its preferred seat when open (rematch keeps each player’s color)', () => {
+    let m = roomInit('deathmatch', 2);
+    // First joiner asks for p2 and should get it, not the first free slot (p1).
+    m = roomReduce(m, { t: 'join', connId: 'A', issueToken: 'tokA', seat: 'p2' }).model;
+    expect(m.slots.find((s) => s.connId === 'A')?.playerId).toBe('p2');
+    // Second joiner asks for the now-taken p2 and falls back to the only open seat (p1).
+    m = roomReduce(m, { t: 'join', connId: 'B', issueToken: 'tokB', seat: 'p2' }).model;
+    expect(m.slots.find((s) => s.connId === 'B')?.playerId).toBe('p1');
+  });
+
+  it('makeHost transfers host to a connected player (host-only)', () => {
+    const seated = seatedTwo();
+    const denied = roomReduce(seated, { t: 'makeHost', connId: 'B', playerId: 'p1' });
+    expect(denied.out.some((o) => o.msg.type === 'error')).toBe(true);
+    const ok = roomReduce(seated, { t: 'makeHost', connId: 'A', playerId: 'p2' });
+    expect(ok.model.hostConnId).toBe('B');
+  });
+
   it('rejects startGame from a non-host', () => {
     const m = seatedTwo();
     const step = roomReduce(m, { t: 'startGame', connId: 'B' });

@@ -48,13 +48,17 @@ export function Modal({
             right: 12,
             width: 32,
             height: 32,
-            fontSize: 18,
+            fontSize: 20,
             lineHeight: 1,
             borderRadius: 8,
             background: theme.surfaceAlt,
             border: `1px solid ${theme.border}`,
             color: theme.text,
             cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: 0,
           }}
         >
           ×

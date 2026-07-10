@@ -4,8 +4,8 @@ import {
   START_ENERGY,
   START_AMMO,
   CORNER_ZONES,
-  DEFAULT_DEATH_CAP,
-  DEFAULT_TARGET_SCORE,
+  defaultDeathCapForCount,
+  defaultTargetScoreForCount,
 } from './constants';
 
 const ALL_PLAYER_IDS: PlayerId[] = ['p1', 'p2', 'p3', 'p4'];
@@ -57,7 +57,11 @@ function createPlayer(id: PlayerId, color: PlayerState['color'], eliminated: boo
   };
 }
 
-export function createInitialGameState(mode: GameMode, playerCount: number = 2): GameState {
+export function createInitialGameState(
+  mode: GameMode,
+  playerCount: number = 2,
+  options?: { deathCap?: number; targetScore?: number },
+): GameState {
   const turnOrder = TURN_ORDER_BY_COUNT[playerCount] ?? ALL_PLAYER_IDS.slice(0, playerCount);
 
   const players = {} as Record<PlayerId, PlayerState>;
@@ -73,8 +77,8 @@ export function createInitialGameState(mode: GameMode, playerCount: number = 2):
     currentTurn: 'p1',
     mode,
     winner: null,
-    deathCap: DEFAULT_DEATH_CAP,
-    targetScore: DEFAULT_TARGET_SCORE,
+    deathCap: options?.deathCap ?? defaultDeathCapForCount(playerCount),
+    targetScore: options?.targetScore ?? defaultTargetScoreForCount(playerCount),
     pendingPickups: [],
   };
 }

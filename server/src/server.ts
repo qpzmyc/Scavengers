@@ -1,6 +1,6 @@
 import { Server, routePartykitRequest, type Connection, type ConnectionContext } from 'partyserver';
 import type { GameMode } from '../../src/engine';
-import type { ClientMsg, LobbyClientMsg } from '../../src/online/protocol';
+import type { ClientMsg, LobbyClientMsg, ServerMsg } from '../../src/online/protocol';
 import { roomInit, roomReduce, isAbandonedInLobby, type RoomInput, type RoomModel } from '../../src/online/roomReducer';
 import { lobbyInit, lobbyReduce, type LobbyModel } from '../../src/online/lobbyReducer';
 
@@ -20,11 +20,26 @@ export class ScavengersServer extends Server<Record<string, unknown>> {
 
   onConnect(conn: Connection, ctx: ConnectionContext) {
     if (!this.model) {
-      // The creating client passes the room settings as query params on first connect.
       const url = new URL(ctx.request.url);
+      // Only the creating client's first connect carries `create=1`; anyone else hitting an
+      // as-yet-nonexistent room code (a typo, a stale link) gets rejected instead of silently
+      // spinning up a brand-new empty room under their feet.
+      if (url.searchParams.get('create') !== '1') {
+        conn.send(JSON.stringify({ type: 'error', message: 'Invalid room code.' } satisfies ServerMsg));
+        conn.close();
+        return;
+      }
+      // The creating client passes the room settings as query params on first connect.
       const mode = (url.searchParams.get('mode') as GameMode) || 'lastStanding';
       const count = Number(url.searchParams.get('count')) || 2;
-      this.model = roomInit(mode, count);
+      const deathCapParam = Number(url.searchParams.get('deathCap'));
+      const targetScoreParam = Number(url.searchParams.get('targetScore'));
+      const visibility = url.searchParams.get('visibility') === 'private' ? 'private' : 'public';
+      this.model = roomInit(mode, count, {
+        deathCap: Number.isFinite(deathCapParam) && deathCapParam > 0 ? deathCapParam : undefined,
+        targetScore: Number.isFinite(targetScoreParam) && targetScoreParam > 0 ? targetScoreParam : undefined,
+        visibility,
+      });
     }
     this.dispatch({ t: 'connect', connId: conn.id });
   }
@@ -32,11 +47,15 @@ export class ScavengersServer extends Server<Record<string, unknown>> {
   onMessage(conn: Connection, raw: string | ArrayBuffer | ArrayBufferView) {
     const msg = parse<ClientMsg>(raw);
     if (!msg) return;
-    if (msg.type === 'join') this.dispatch({ t: 'join', connId: conn.id, token: msg.token, issueToken: crypto.randomUUID() });
+    if (msg.type === 'join') this.dispatch({ t: 'join', connId: conn.id, token: msg.token, issueToken: crypto.randomUUID(), becomeHost: msg.becomeHost, seat: msg.seat });
     else if (msg.type === 'startGame') this.dispatch({ t: 'startGame', connId: conn.id });
     else if (msg.type === 'action') this.dispatch({ t: 'action', connId: conn.id, request: msg.request });
     else if (msg.type === 'endMatch') this.dispatch({ t: 'endMatch', connId: conn.id });
     else if (msg.type === 'setName') this.dispatch({ t: 'setName', connId: conn.id, name: msg.name });
+    else if (msg.type === 'updateSettings') this.dispatch({ t: 'updateSettings', connId: conn.id, mode: msg.mode, deathCap: msg.deathCap, targetScore: msg.targetScore });
+    else if (msg.type === 'makeHost') this.dispatch({ t: 'makeHost', connId: conn.id, playerId: msg.playerId });
+    else if (msg.type === 'kickPlayer') this.dispatch({ t: 'kickPlayer', connId: conn.id, playerId: msg.playerId });
+    else if (msg.type === 'backToLobby') this.dispatch({ t: 'backToLobby', connId: conn.id, roomCode: msg.roomCode });
   }
 
   onClose(conn: Connection) {

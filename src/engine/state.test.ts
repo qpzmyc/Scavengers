@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { createInitialGameState } from './state';
-import { START_ENERGY, START_AMMO, DEFAULT_DEATH_CAP, DEFAULT_TARGET_SCORE } from './constants';
+import { START_ENERGY, START_AMMO, defaultDeathCapForCount, defaultTargetScoreForCount } from './constants';
 
 describe('createInitialGameState', () => {
   it('sets both players to full energy and starting ammo', () => {
@@ -23,12 +23,18 @@ describe('createInitialGameState', () => {
     expect(state.winner).toBeNull();
   });
 
-  it('sets mode-specific defaults', () => {
-    const lastStanding = createInitialGameState('lastStanding');
-    expect(lastStanding.deathCap).toBe(DEFAULT_DEATH_CAP);
+  it('sets count-based defaults (2p: 5 lives / 20 pts)', () => {
+    const lastStanding = createInitialGameState('lastStanding', 2);
+    expect(lastStanding.deathCap).toBe(defaultDeathCapForCount(2));
 
-    const deathmatch = createInitialGameState('deathmatch');
-    expect(deathmatch.targetScore).toBe(DEFAULT_TARGET_SCORE);
+    const deathmatch = createInitialGameState('deathmatch', 2);
+    expect(deathmatch.targetScore).toBe(defaultTargetScoreForCount(2));
+  });
+
+  it('applies explicit deathCap/targetScore overrides', () => {
+    const s = createInitialGameState('deathmatch', 4, { deathCap: 6, targetScore: 45 });
+    expect(s.deathCap).toBe(6);
+    expect(s.targetScore).toBe(45);
   });
 
   it('assigns green to p1 and red to p2', () => {

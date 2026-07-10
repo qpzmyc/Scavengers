@@ -47,7 +47,23 @@ export function visionRadiusForCount(playerCount: number): number {
 }
 
 export const DEFAULT_DEATH_CAP = 3;
-export const DEFAULT_TARGET_SCORE = 30;
+export const DEFAULT_TARGET_SCORE = 25;
+
+// Configurable ranges for the pre-game settings slider.
+export const MIN_TARGET_SCORE = 10;
+export const MAX_TARGET_SCORE = 60;
+export const TARGET_SCORE_STEP = 5;
+export const MIN_DEATH_CAP = 1;
+export const MAX_DEATH_CAP = 6;
+
+// Per-player-count defaults: a fuller board (4p) is deadlier, so it wins on fewer
+// points and fewer lives; a 2p duel runs longer.
+export function defaultTargetScoreForCount(playerCount: number): number {
+  return playerCount >= 4 ? 30 : 20;
+}
+export function defaultDeathCapForCount(playerCount: number): number {
+  return playerCount >= 4 ? 3 : 5;
+}
 export const KILL_SCORE = 5;
 export const DEATH_SCORE = -3;
 export const STREAK_SCORE_PER_TURN = 1;

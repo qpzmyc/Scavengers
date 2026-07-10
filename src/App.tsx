@@ -34,6 +34,7 @@ import { ControlPanel, type Flow, type AttackType, type Capabilities } from './c
 import { MenuFlow } from './components/menu/MenuFlow';
 import type { EnterRoomConfig } from './components/menu/MenuFlow';
 import { OnlineSession } from './online/OnlineSession';
+import { ConfirmDialog } from './components/ConfirmDialog';
 import { theme } from './theme';
 import {
   type AnimFrame,
@@ -99,7 +100,7 @@ function useCellSize(): number {
 type Route =
   | { kind: 'menu'; initialGameType?: 'online' | 'inPerson' | 'bots'; initialScreen?: 'gameType' | 'settings' | 'join' }
   | { kind: 'game' }
-  | { kind: 'online'; roomId: string; create?: EnterRoomConfig['create'] };
+  | { kind: 'online'; roomId: string; create?: EnterRoomConfig['create']; becomeHost?: boolean; seat?: EnterRoomConfig['seat'] };
 
 function App() {
   const [route, setRoute] = useState<Route>({ kind: 'menu' });
@@ -112,6 +113,7 @@ function App() {
   // "Replaying ___'s turn" banner can update one player at a time instead of
   // naming every replayed player at once.
   const [replayActorId, setReplayActorId] = useState<PlayerId | null>(null);
+  const [showMenuConfirm, setShowMenuConfirm] = useState(false);
   const cellSize = useCellSize();
 
   // Persistent, stacked kill notifications shown top-right of the screen. Never
@@ -169,15 +171,33 @@ function App() {
 
   const gameOver = state.winner !== null;
   const viewerId = state.currentTurn;
+
+  // Win sequence: fade to black slowly, then reveal the win screen (mirrors OnlineGame).
+  const [winFadeIn, setWinFadeIn] = useState(false);
+  const [winScreenReady, setWinScreenReady] = useState(false);
+  const [winContentIn, setWinContentIn] = useState(false);
+  useEffect(() => {
+    if (!gameOver) {
+      setWinFadeIn(false);
+      setWinScreenReady(false);
+      setWinContentIn(false);
+      return;
+    }
+    // Board fades to black over 5s, then the win screen fades in over 3s (sequential).
+    const t1 = window.setTimeout(() => setWinFadeIn(true), 50);
+    const t2 = window.setTimeout(() => setWinScreenReady(true), 5050);
+    const t3 = window.setTimeout(() => setWinContentIn(true), 5100);
+    return () => { window.clearTimeout(t1); window.clearTimeout(t2); window.clearTimeout(t3); };
+  }, [gameOver]);
   const me = state.players[viewerId];
   const others = state.turnOrder.filter((id) => id !== viewerId).map((id) => state.players[id]);
   const interactive = phase === 'playing' && !gameOver;
   // Lowercased set of every player's color name, for tinting color words in messages.
   const colorSet = new Set(state.turnOrder.map((id) => state.players[id].color.toLowerCase()));
 
-  const startGame = (nextMode: GameMode, count: number) => {
+  const startGame = (nextMode: GameMode, count: number, options?: { deathCap: number; targetScore: number }) => {
     clearTimers();
-    const s = createInitialGameState(nextMode, count);
+    const s = createInitialGameState(nextMode, count, options);
     setMode(nextMode);
     setState(s);
     setDisplay(s);
@@ -206,6 +226,42 @@ function App() {
     setPhase('playing');
     setRoute({ kind: 'menu' });
   };
+
+  // A fixed top-right "Menu" button (identical look + location on the handoff screen
+  // and during play) plus its confirmation dialog. Quitting mid-game loses progress,
+  // so it's gated behind an "are you sure?" prompt.
+  const menuChrome = (
+    <>
+      <button
+        onClick={() => setShowMenuConfirm(true)}
+        style={{
+          position: 'fixed',
+          top: 24,
+          right: 24,
+          zIndex: 150,
+          padding: '8px 16px',
+          fontSize: 13,
+          fontWeight: 600,
+          borderRadius: 8,
+          background: theme.surface,
+          border: `1px solid ${theme.border}`,
+          color: theme.textMuted,
+          cursor: 'pointer',
+        }}
+      >
+        Menu
+      </button>
+      {showMenuConfirm && (
+        <ConfirmDialog
+          title="Return to menu?"
+          message="Are you sure you want to quit to the menu? The current game will be lost."
+          confirmLabel="Quit to menu"
+          onConfirm={() => { setShowMenuConfirm(false); backToMenu(); }}
+          onCancel={() => setShowMenuConfirm(false)}
+        />
+      )}
+    </>
+  );
 
   const canPunch = me.energy >= PUNCH_ENERGY_COST;
   const canShoot = me.ammo >= SHOOT_AMMO_COST && me.energy >= ATTACK_ENERGY_COST;
@@ -636,7 +692,7 @@ function App() {
             && hitKeys.has(`${p.phantomDisplayPosition.x},${p.phantomDisplayPosition.y}`));
         if (phantomHits.length) {
           const names = phantomHits.map((p) => p.color.toUpperCase());
-          const phantomMsg = `Only hit ${names.join(', ')}'s phantom — no one there!`;
+          const phantomMsg = `You hit ${names.join(', ')}'s Phantom!`;
           const phantomTintDelay = phantomHits.reduce((m, p) => {
             const tile = tints.find((ti) => ti.x === p.phantomDisplayPosition!.x && ti.y === p.phantomDisplayPosition!.y);
             return Math.max(m, tile ? tile.delayMs : 0);
@@ -871,6 +927,7 @@ function App() {
           boxSizing: 'border-box',
         }}
       >
+        {menuChrome}
         {noticeStack}
         <div style={{ textAlign: 'center' }}>
           <div style={{ color: theme.textMuted, fontSize: 14, marginBottom: 6 }}>Pass the device — make sure the other player looks away.</div>
@@ -907,11 +964,11 @@ function App() {
       <MenuFlow
         initialGameType={route.initialGameType}
         initialScreen={route.initialScreen}
-        onStartGame={(nextMode, count) => {
-          startGame(nextMode, count);
+        onStartGame={(nextMode, count, options) => {
+          startGame(nextMode, count, options);
           setRoute({ kind: 'game' });
         }}
-        onEnterRoom={(config) => setRoute({ kind: 'online', roomId: config.roomId, create: config.create })}
+        onEnterRoom={(config) => setRoute({ kind: 'online', roomId: config.roomId, create: config.create, becomeHost: config.becomeHost, seat: config.seat })}
       />
     );
   }
@@ -922,7 +979,10 @@ function App() {
       <OnlineSession
         roomId={route.roomId}
         create={route.create}
+        becomeHost={route.becomeHost}
+        seat={route.seat}
         onLeave={() => setRoute({ kind: 'menu', initialGameType: 'online', initialScreen: 'settings' })}
+        onEnterRoom={(config) => setRoute({ kind: 'online', roomId: config.roomId, create: config.create, becomeHost: config.becomeHost, seat: config.seat })}
       />
     );
   }
@@ -931,55 +991,76 @@ function App() {
 
   return (
     <div style={{ minHeight: '100vh', padding: 24, boxSizing: 'border-box' }}>
+      {menuChrome}
       {noticeStack}
-      <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, marginBottom: 20, flexWrap: 'wrap' }}>
-        <h1 style={{ fontSize: 26 }}>Scavengers</h1>
-        <span style={{ color: theme.textMuted, fontSize: 13 }}>
-          {mode === 'lastStanding' ? 'Last Standing' : 'Deathmatch'}
-        </span>
-        <div style={{ marginLeft: 'auto' }}>
-          <button
-            onClick={backToMenu}
-            style={{
-              padding: '6px 12px',
-              fontSize: 12,
-              fontWeight: 500,
-              borderRadius: 8,
-              background: theme.surface,
-              border: `1px solid ${theme.border}`,
-              color: theme.textMuted,
-              cursor: 'pointer',
-            }}
-          >
-            Menu
-          </button>
-        </div>
-      </div>
-
-      <div style={{ display: 'flex', gap: 24, alignItems: 'flex-start', justifyContent: 'center', flexWrap: 'wrap' }}>
-        {state.mode === 'lastStanding' ? <Lives state={state} /> : <Leaderboard state={state} />}
-
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}>
-          {gameOver ? (
-            <div style={{ width: columnWidth, boxSizing: 'border-box', padding: '12px 16px', borderRadius: theme.radius, background: theme.accentSoft, color: theme.accentText, fontWeight: 700, textAlign: 'center', display: 'flex', flexDirection: 'column', gap: 10, alignItems: 'center' }}>
-              <span>Player {state.players[state.winner!].color.toUpperCase()} wins!</span>
+      {gameOver && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: '#000',
+            zIndex: 600,
+            opacity: winFadeIn ? 1 : 0,
+            transition: 'opacity 5s ease',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 28,
+            padding: 24,
+            boxSizing: 'border-box',
+            pointerEvents: winScreenReady ? 'auto' : 'none',
+          }}
+        >
+          {winScreenReady && (
+            <div
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                gap: 28,
+                opacity: winContentIn ? 1 : 0,
+                transition: 'opacity 3s ease',
+              }}
+            >
+              <h1 style={{ fontSize: 48, margin: 0, textAlign: 'center' }}>
+                {renderColoredText(state.players[state.winner!].color.toUpperCase(), colorSet)} Wins!
+              </h1>
+              <div style={{ transform: 'scale(1.1)', transformOrigin: 'top center' }}>
+                {state.mode === 'lastStanding' ? <Lives state={state} /> : <Leaderboard state={state} />}
+              </div>
               <button
                 onClick={backToMenu}
                 style={{
-                  padding: '8px 18px',
-                  fontSize: 13,
-                  fontWeight: 600,
-                  borderRadius: 8,
+                  marginTop: 8,
+                  padding: '14px 32px',
+                  fontSize: 18,
+                  fontWeight: 700,
                   background: theme.accent,
                   border: `1px solid ${theme.accent}`,
                   color: '#fff',
+                  borderRadius: 10,
                   cursor: 'pointer',
                 }}
               >
                 Back to Menu
               </button>
             </div>
-          ) : phase === 'replaying' ? (
+          )}
+        </div>
+      )}
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, marginBottom: 20, flexWrap: 'wrap' }}>
+        <h1 style={{ fontSize: 26 }}>Scavengers</h1>
+        <span style={{ color: theme.textMuted, fontSize: 13 }}>
+          {mode === 'lastStanding' ? 'Survival' : 'Deathmatch'}
+        </span>
+      </div>
+
+      <div style={{ display: 'flex', gap: 24, alignItems: 'flex-start', justifyContent: 'center', flexWrap: 'wrap' }}>
+        {state.mode === 'lastStanding' ? <Lives state={state} /> : <Leaderboard state={state} />}
+
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}>
+          {phase === 'replaying' ? (
             <div style={{ width: columnWidth, boxSizing: 'border-box', padding: '12px 16px', borderRadius: theme.radius, background: theme.surface, border: `1px solid ${theme.border}`, color: theme.textMuted, textAlign: 'center' }}>
               {(() => {
                 if (!replayActorId) return 'Replaying…';

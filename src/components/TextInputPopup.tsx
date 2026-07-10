@@ -8,6 +8,7 @@ export function TextInputPopup({
   initialValue = '',
   confirmLabel = 'Confirm',
   maxLength,
+  allowEmpty = false,
   onConfirm,
   onClose,
 }: {
@@ -16,12 +17,15 @@ export function TextInputPopup({
   initialValue?: string;
   confirmLabel?: string;
   maxLength?: number;
+  // When true, an empty value is a valid submission (e.g. clearing a custom name back
+  // to the default). When false, empty submissions are ignored.
+  allowEmpty?: boolean;
   onConfirm: (value: string) => void;
   onClose: () => void;
 }) {
   const [value, setValue] = useState(initialValue);
   const submit = () => {
-    if (value.trim()) onConfirm(value.trim());
+    if (value.trim() || allowEmpty) onConfirm(value.trim());
   };
   return (
     <Modal title={title} onClose={onClose}>

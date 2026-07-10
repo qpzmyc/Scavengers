@@ -1,11 +1,14 @@
-import type { GameState } from '../engine';
+import type { GameState, PlayerId } from '../engine';
 import { theme } from '../theme';
 
 interface LivesProps {
   state: GameState;
+  // Overrides the color-based label per player (e.g. a custom online display name).
+  // Falls back to color.toUpperCase() when omitted (hotseat's call sites omit it).
+  displayName?: (id: PlayerId) => string;
 }
 
-export function Lives({ state }: LivesProps) {
+export function Lives({ state, displayName }: LivesProps) {
   const players = state.turnOrder.map((id) => state.players[id]);
 
   return (
@@ -46,7 +49,7 @@ export function Lives({ state }: LivesProps) {
                     flexShrink: 0,
                   }}
                 />
-                <span style={{ fontSize: 15, fontWeight: 600, color: theme.text }}>{p.color.toUpperCase()}</span>
+                <span style={{ fontSize: 15, fontWeight: 600, color: theme.text }}>{displayName ? displayName(p.id) : p.color.toUpperCase()}</span>
                 {p.eliminated && (
                   <span
                     style={{
