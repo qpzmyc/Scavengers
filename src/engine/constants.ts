@@ -21,7 +21,14 @@ export const BOMB_AMMO_COST = 2;
 export const ATTACK_MAX_REPOSITION = 1;
 
 export const ENERGY_PICKUP_COUNT = 4;
-export const AMMO_PICKUP_COUNT = 3;
+export const AMMO_PICKUP_COUNT_DEFAULT = 3; // 2-player games
+export const AMMO_PICKUP_COUNT_4P = 4; // 4-player games
+
+// Ammo pickup count for a game with `playerCount` players.
+export function ammoPickupCountForCount(playerCount: number): number {
+  return playerCount >= 4 ? AMMO_PICKUP_COUNT_4P : AMMO_PICKUP_COUNT_DEFAULT;
+}
+
 export const PICKUP_RESPAWN_PLIES = 4;
 
 export const RESPAWN_IMMUNITY_TURNS = 2;

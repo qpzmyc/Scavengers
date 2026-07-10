@@ -1,7 +1,7 @@
 import type { Tile, Position } from './types';
-import { GRID_SIZE } from './constants';
+import { GRID_SIZE, ammoPickupCountForCount } from './constants';
 
-export function buildBoard(): Tile[][] {
+export function buildBoard(playerCount: number = 2): Tile[][] {
   const board: Tile[][] = [];
   for (let y = 0; y < GRID_SIZE; y++) {
     const row: Tile[] = [];
@@ -24,7 +24,8 @@ export function buildBoard(): Tile[][] {
   // Dead center -> wall
   set(5, 5, 'wall');
 
-  // 3 random distinct cells within the central 3x3 (excluding center wall) -> ammo pickups
+  // Random distinct cells within the central 3x3 (excluding center wall) -> ammo pickups.
+  // Count scales with player count (see ammoPickupCountForCount).
   const centralCells: Position[] = [];
   for (let x = 4; x <= 6; x++) {
     for (let y = 4; y <= 6; y++) {
@@ -37,7 +38,7 @@ export function buildBoard(): Tile[][] {
     const j = Math.floor(Math.random() * (i + 1));
     [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
   }
-  for (const cell of shuffled.slice(0, 3)) {
+  for (const cell of shuffled.slice(0, ammoPickupCountForCount(playerCount))) {
     set(cell.x, cell.y, 'ammoPickup');
   }
 

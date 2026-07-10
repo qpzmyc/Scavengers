@@ -67,7 +67,7 @@ export function createInitialGameState(mode: GameMode, playerCount: number = 2):
   }
 
   return {
-    board: buildBoard(),
+    board: buildBoard(playerCount),
     players,
     turnOrder,
     currentTurn: 'p1',
