@@ -220,7 +220,7 @@ export function OnlineGame({ room, onLeave, isHost }: { room: OnlineRoom; onLeav
           position: 'fixed',
           inset: 0,
           zIndex: 200,
-          background: 'rgba(10, 13, 18, 0.78)',
+          background: theme.scrim,
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',
