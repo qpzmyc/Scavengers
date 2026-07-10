@@ -1,0 +1,15 @@
+{
+  "name": "scavengers-server",
+  "private": true,
+  "version": "0.0.1",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy"
+  },
+  "dependencies": {
+    "partyserver": "^0.0.68"
+  },
+  "devDependencies": {
+    "wrangler": "^4.0.0"
+  }
+}
