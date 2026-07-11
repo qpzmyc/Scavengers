@@ -121,8 +121,14 @@ export class LobbyServer extends Server<Record<string, unknown>> {
   }
 }
 
+interface Env extends Record<string, unknown> {
+  ASSETS: { fetch(request: Request): Promise<Response> };
+}
+
 export default {
-  async fetch(request: Request, env: Record<string, unknown>) {
-    return (await routePartykitRequest(request, env)) || new Response('Not Found', { status: 404 });
+  async fetch(request: Request, env: Env) {
+    const partyResponse = await routePartykitRequest(request, env);
+    if (partyResponse) return partyResponse;
+    return env.ASSETS.fetch(request);
   },
-} satisfies ExportedHandler<Record<string, unknown>>;
+} satisfies ExportedHandler<Env>;

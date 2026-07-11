@@ -2,6 +2,12 @@
   "name": "scavengers",
   "main": "src/server.ts",
   "compatibility_date": "2026-07-09",
+  "assets": {
+    "directory": "../dist",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/parties/*"]
+  },
   "durable_objects": {
     "bindings": [
       { "name": "ScavengersServer", "class_name": "ScavengersServer" },
