@@ -87,9 +87,9 @@ interface ControlPanelProps {
 }
 
 const ATTACK_TARGET_HINT: Record<AttackType, string> = {
-  punch: 'Click an adjacent square to punch (kills whoever stands there).',
-  shoot: 'Click an adjacent square to set your firing direction.',
-  bomb: 'Click any square on a straight line (incl. diagonal) from you.',
+  punch: 'Click an adjacent square to aim your punch. Click confirm to swing.',
+  shoot: 'Click an adjacent square to aim your shot. Click confirm to fire.',
+  bomb: 'Click on a square to plant a 3x3 bomb. Click confirm to detonate.',
 };
 
 type Variant = 'primary' | 'secondary' | 'toggle';
@@ -188,7 +188,7 @@ export function ControlPanel({
     return (
       <div style={wrap} data-testid="control-panel">
         <div style={title}>Move</div>
-        <div style={hint}>Click an adjacent square (up to {maxMoveTiles} steps). Chosen: {flow.path.length}/{maxMoveTiles}. Click your last step to undo it.</div>
+        <div style={hint}>Click an adjacent square to move (up to {maxMoveTiles} times per turn). Click your character to undo.</div>
         <div style={row()}>
           <button style={sizedBtn('secondary', false, false, width)} onClick={onCancel}>Cancel</button>
           <button style={sizedBtn('primary', !confirmEnabled, false, width)} disabled={!confirmEnabled} onClick={onConfirm}>Confirm</button>
@@ -201,7 +201,7 @@ export function ControlPanel({
     return (
       <div style={wrap} data-testid="control-panel">
         <div style={title}>Rest</div>
-        <div style={hint}>Recover +{REST_ENERGY_GAIN} energy (up to the max). You forfeit moving or attacking this turn.</div>
+        <div style={hint}>Gain +{REST_ENERGY_GAIN} energy. You forfeit moving or attacking this turn.</div>
         <div style={row()}>
           <button style={sizedBtn('secondary', false, false, width)} onClick={onCancel}>Cancel</button>
           <button style={sizedBtn('primary', false, false, width)} onClick={onConfirm}>Confirm</button>
@@ -214,7 +214,7 @@ export function ControlPanel({
     return (
       <div style={wrap} data-testid="control-panel">
         <div style={title}>Fake Move</div>
-        <div style={hint}>Click an adjacent square to project a phantom there (you stay put).</div>
+        <div style={hint}>Click an adjacent square to project or move your phantom (you stay put). Other players can only see your phantom, but you will be crushed if another player steps onto you.</div>
         <div style={row()}>
           <button style={sizedBtn('secondary', false, false, width)} onClick={onCancel}>Cancel</button>
           <button style={sizedBtn('primary', !confirmEnabled, false, width)} disabled={!confirmEnabled} onClick={onConfirm}>Confirm</button>
@@ -228,7 +228,7 @@ export function ControlPanel({
       <div style={wrap} data-testid="control-panel">
         <div style={title}>Attack — reposition (optional)</div>
         <div style={hint}>
-          Click an adjacent square to step before choosing a weapon (up to 1 step), or skip straight to picking one. Chosen: {flow.path.length}. Click your last step to undo it. Moving costs 1 energy per tile.
+          Click an adjacent square to reposition before attacking (-1 energy), or click skip.
         </div>
         <div style={row()}>
           <button style={sizedBtn('secondary', false, false, width)} onClick={onBack}>Back</button>
@@ -245,8 +245,8 @@ export function ControlPanel({
         <div style={row()}>
           {/* Always the same (non-greyed) style, regardless of affordability — the
               toast notification is the feedback mechanism now, not a dimmed button. */}
-          <button style={{ ...sizedBtn('toggle', false, flow.type === 'punch', width), ...costCol }} onClick={() => onSelectAttackType('punch')}><span>Punch</span><CostBadge items={COST.punch} /></button>
-          <button style={{ ...sizedBtn('toggle', false, flow.type === 'shoot', width), ...costCol }} onClick={() => onSelectAttackType('shoot')}><span>Shoot</span><CostBadge items={COST.shoot} /></button>
+          <button style={{ ...sizedBtn('toggle', false, flow.type === 'punch', width), ...costCol }} onClick={() => onSelectAttackType('punch')}><span>Fist</span><CostBadge items={COST.punch} /></button>
+          <button style={{ ...sizedBtn('toggle', false, flow.type === 'shoot', width), ...costCol }} onClick={() => onSelectAttackType('shoot')}><span>Gun</span><CostBadge items={COST.shoot} /></button>
           <button style={{ ...sizedBtn('toggle', false, flow.type === 'bomb', width), ...costCol }} onClick={() => onSelectAttackType('bomb')}><span>Bomb</span><CostBadge items={COST.bomb} /></button>
         </div>
         <div style={row()}>

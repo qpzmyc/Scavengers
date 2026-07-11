@@ -123,4 +123,69 @@ describe('applyAction', () => {
       expect(res.state.currentTurn).toBe('p2'); // crush = no extra turn, turn passes
     }
   });
+
+  it('fake-moving a phantom onto an enemy real tile crushes them', () => {
+    let state = createInitialGameState('deathmatch', 2); // currentTurn p1
+    state = withPlayerAt(state, 'p1', { x: 5, y: 5 });
+    state = withPlayerAt(state, 'p2', { x: 6, y: 5 }); // adjacent, visible
+    const res = applyAction(state, 'p1', { kind: 'fakeMove', dir: { x: 1, y: 0 } });
+    expect(res.ok).toBe(true);
+    if (res.ok) {
+      expect(res.event.killedPlayerIds).toContain('p2');
+      expect(res.state.currentTurn).toBe('p2'); // crush = no extra turn
+    }
+  });
+
+  it('rejects a fake move onto an enemy displayed phantom tile', () => {
+    let state = createInitialGameState('deathmatch', 2);
+    state = withPlayerAt(state, 'p1', { x: 5, y: 5 });
+    state = withPlayerAt(state, 'p2', { x: 8, y: 5 });
+    state = { ...state, players: { ...state.players, p2: { ...state.players.p2, isPhantom: true, phantomDisplayPosition: { x: 6, y: 5 } } } };
+    const res = applyAction(state, 'p1', { kind: 'fakeMove', dir: { x: 1, y: 0 } }); // → (6,5)
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.error).toMatch(/phantom is already there/i);
+  });
+
+  it("destroys the spawn owner's phantom when an enemy walks into their spawn zone", () => {
+    let state = createInitialGameState('deathmatch', 2);
+    // p2 has a decoy out and is hiding; p2's real body sits at (8,9) away from its corner.
+    state = withPlayerAt(state, 'p2', { x: 8, y: 9 });
+    state = { ...state, players: { ...state.players, p2: { ...state.players.p2, isPhantom: true, phantomDisplayPosition: { x: 5, y: 5 } } } };
+    state = withPlayerAt(state, 'p1', { x: 8, y: 10 });
+    state = withEmptyTile(state, { x: 9, y: 9 }); // inside p2's spawn zone
+    const res = applyAction(state, 'p1', { kind: 'move', path: [{ x: 9, y: 9 }] });
+    expect(res.ok).toBe(true);
+    if (res.ok) {
+      expect(res.event.phantomSpawnOwnerId).toBe('p2');
+      expect(res.state.players.p2.isPhantom).toBe(false);
+      expect(res.state.players.p2.phantomDisplayPosition).toBeNull();
+      expect(res.state.players.p1.isPhantom).toBe(false); // mover's own state untouched
+    }
+  });
+
+  it('does not fire the spawn phantom-destroy when the spawn owner has no phantom', () => {
+    let state = createInitialGameState('deathmatch', 2);
+    state = withPlayerAt(state, 'p2', { x: 8, y: 9 }); // no phantom out
+    state = withPlayerAt(state, 'p1', { x: 8, y: 10 });
+    state = withEmptyTile(state, { x: 9, y: 9 });
+    const res = applyAction(state, 'p1', { kind: 'move', path: [{ x: 9, y: 9 }] });
+    expect(res.ok).toBe(true);
+    if (res.ok) expect(res.event.phantomSpawnOwnerId).toBeUndefined();
+  });
+
+  it('clears the movers own phantom when a real move crushes an enemy (Rule C)', () => {
+    let state = createInitialGameState('deathmatch', 2);
+    state = withPlayerAt(state, 'p1', { x: 5, y: 5 });
+    state = { ...state, players: { ...state.players, p1: { ...state.players.p1, isPhantom: true, phantomDisplayPosition: { x: 9, y: 9 } } } };
+    state = withEmptyTile(state, { x: 6, y: 5 });
+    state = withPlayerAt(state, 'p2', { x: 6, y: 5 });
+    state = { ...state, players: { ...state.players, p2: { ...state.players.p2, isPhantom: true, phantomDisplayPosition: { x: 1, y: 1 } } } };
+    const res = applyAction(state, 'p1', { kind: 'move', path: [{ x: 6, y: 5 }] });
+    expect(res.ok).toBe(true);
+    if (res.ok) {
+      expect(res.event.killedPlayerIds).toContain('p2');
+      expect(res.state.players.p1.isPhantom).toBe(false);
+      expect(res.state.players.p1.phantomDisplayPosition).toBeNull();
+    }
+  });
 });

@@ -22,7 +22,7 @@ import {
   ATTACK_ENERGY_COST,
   maxMoveTilesForCount,
 } from '../engine';
-import { Board, type Highlight, type RedTint, type DeathAnim } from '../components/Board';
+import { Board, type Highlight, type HighlightKind, type RedTint, type DeathAnim } from '../components/Board';
 import { ResourceBars, type ResourcePreview } from '../components/ResourceBars';
 import { Leaderboard } from '../components/Leaderboard';
 import { Lives } from '../components/Lives';
@@ -87,11 +87,15 @@ export function OnlineGame({
   onLeave,
   onEnterRoom,
   isHost,
+  introDone = true,
 }: {
   room: OnlineRoom;
   onLeave: () => void;
   onEnterRoom: (config: EnterRoomConfig) => void;
   isHost: boolean;
+  // False while the start-of-game fade/title intro (owned by OnlineSession) is still
+  // playing; the first-turn randomizer waits until it flips true.
+  introDone?: boolean;
 }) {
   const [flow, setFlow] = useState<Flow>({ kind: 'menu' });
   const [display, setDisplay] = useState<GameState | null>(room.state);
@@ -122,16 +126,6 @@ export function OnlineGame({
   const [highlightId, setHighlightId] = useState<PlayerId | null>(null);
   const [revealLanded, setRevealLanded] = useState(false);
 
-  // Game-start intro: fade the board to black over 5s, then back from black over 3s,
-  // and only then hand off to the first-turn randomizer (gated via `introActive`).
-  const [introActive, setIntroActive] = useState(true);
-  const [introOpacity, setIntroOpacity] = useState(0);
-  useEffect(() => {
-    const t1 = window.setTimeout(() => setIntroOpacity(1), 50);      // begin 5s fade to black
-    const t2 = window.setTimeout(() => setIntroOpacity(0), 5050);    // begin 3s fade back from black
-    const t3 = window.setTimeout(() => setIntroActive(false), 8100); // intro done → start randomizer
-    return () => { window.clearTimeout(t1); window.clearTimeout(t2); window.clearTimeout(t3); };
-  }, []);
 
   // Win sequence: fade to black slowly, then reveal the win screen.
   const winnerId = room.state?.winner ?? null;
@@ -157,7 +151,7 @@ export function OnlineGame({
   }, [room.phase]);
 
   useEffect(() => {
-    if (introActive) return; // wait for the start-of-game fade sequence to finish first
+    if (!introDone) return; // wait for the start-of-game fade/title intro to finish first
     const initialState = room.state;
     if (!initialState) return;
     const order = initialState.turnOrder;
@@ -181,7 +175,7 @@ export function OnlineGame({
       window.clearTimeout(dismiss);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [introActive]);
+  }, [introDone]);
 
   const prevStateRef = useRef<GameState | null>(null);
   const processedEventRef = useRef<ActionEvent | null>(null);
@@ -273,7 +267,7 @@ export function OnlineGame({
 
     if (event.killedPlayerIds.length) {
       const req = event.request;
-      const verb = req.kind === 'move' ? 'crushed' : req.kind === 'attack' ? attackVerb[req.type] : null;
+      const verb = req.kind === 'move' || req.kind === 'fakeMove' ? 'crushed' : req.kind === 'attack' ? attackVerb[req.type] : null;
       if (verb) {
         // Hold the kill notifications until the death actually lands in the animation
         // (the first frame that carries a death fade) instead of firing the instant the
@@ -321,6 +315,16 @@ export function OnlineGame({
       pushActionNotice(<>{subject} hit {targets} Phantom!</>, 'phantom');
     }
 
+    if (event.phantomSpawnOwnerId) {
+      const destroyer = colorName(event.actorId, describe(event.actorId, true), after);
+      const owner = colorName(
+        event.phantomSpawnOwnerId,
+        event.phantomSpawnOwnerId === room.myPlayerId ? 'your' : `${nameFor(event.phantomSpawnOwnerId)}'s`,
+        after,
+      );
+      pushActionNotice(<>{destroyer} destroyed {owner} Phantom!</>, 'phantom');
+    }
+
     setAnimating(true);
     playFrames(frames, () => {
       prevStateRef.current = after;
@@ -336,7 +340,10 @@ export function OnlineGame({
   // "Resolving…" gate (`sending`) would stick forever and lock the player out.
   useEffect(() => {
     if (room.error) {
-      pushActionNotice(room.error, 'warning');
+      // A stale lobby-phase rejection ("The game has already started.") can land after the
+      // match is underway (e.g. a double-tapped Start Game) — it's meaningless mid-game and
+      // was lingering as a stuck toast, so drop it. Still release the send lock either way.
+      if (!/already started/i.test(room.error)) pushActionNotice(room.error, 'warning');
       setSending(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -431,6 +438,11 @@ export function OnlineGame({
 
   // ---- Highlights + click targeting (only while interactive) ----
   const highlights: Highlight[] = [];
+  // Tiles clickable to EXTEND a move/reposition path: every affordable, unblocked neighbor of
+  // the cursor — INCLUDING tiles already in the path (revisiting is allowed, e.g. up, up,
+  // down), but only while under the step limit. When at the limit this set is empty, so a
+  // green (already-selected) tile is only clickable when blue candidates also exist.
+  const extendKeys = new Set<string>();
   if (interactive) {
     if (flow.kind === 'move') {
       const cursor = flow.path.length ? flow.path[flow.path.length - 1] : me.position;
@@ -438,6 +450,7 @@ export function OnlineGame({
       if (flow.path.length < maxMoveTiles && remainingEnergy >= 1) {
         for (const p of neighbors(state.board, cursor)) {
           if (others.some((o) => eq(p, o.isPhantom && o.phantomDisplayPosition ? o.phantomDisplayPosition : o.position))) continue;
+          extendKeys.add(`${p.x},${p.y}`); // clickable whether it renders blue (new) or green (revisit)
           if (flow.path.some((s) => eq(s, p))) continue;
           highlights.push({ x: p.x, y: p.y, kind: 'candidate' });
         }
@@ -455,10 +468,14 @@ export function OnlineGame({
         for (const p of neighbors(state.board, cursor)) {
           if (eq(p, me.position)) continue;
           if (others.some((o) => eq(p, o.isPhantom && o.phantomDisplayPosition ? o.phantomDisplayPosition : o.position))) continue;
+          extendKeys.add(`${p.x},${p.y}`); // clickable whether it renders blue (new) or green (revisit)
           if (flow.path.some((s) => eq(s, p))) continue;
           highlights.push({ x: p.x, y: p.y, kind: 'candidate' });
         }
       }
+      flow.path.forEach((p) => highlights.push({ x: p.x, y: p.y, kind: 'selected' }));
+    } else if (flow.kind === 'attackSelect') {
+      // Choosing a weapon: keep the committed reposition path visible (no new candidates).
       flow.path.forEach((p) => highlights.push({ x: p.x, y: p.y, kind: 'selected' }));
     } else if (flow.kind === 'attackTarget') {
       const from = flow.path.length ? flow.path[flow.path.length - 1] : me.position;
@@ -471,10 +488,36 @@ export function OnlineGame({
       for (const p of candidates) highlights.push({ x: p.x, y: p.y, kind: 'candidate' });
       if (flow.target) highlights.push({ x: flow.target.x, y: flow.target.y, kind: 'selected' });
     }
+    // Starting-square reference: while ANY action is being built (i.e. not on the
+    // 'menu' step), keep the turn's starting tile marked purple until confirm — so even a
+    // rest shows "no movement". If a move loops the preview back ONTO the start, that tile
+    // means both origin AND selected step, so it takes the green+purple blend instead.
+    if (flow.kind !== 'menu') {
+      const hasPath =
+        (flow.kind === 'move' || flow.kind === 'attackReposition' || flow.kind === 'attackSelect' || flow.kind === 'attackTarget') &&
+        flow.path.length > 0;
+      // Blend (green+purple) once the path has ever stepped onto the origin — and it stays
+      // blended even after walking off again (e.g. right, left, left), since the tile still
+      // carries both "start" and "was stepped on" meaning.
+      const loopedBack = hasPath && flow.path.some((s) => eq(s, me.position));
+      highlights.push({ x: me.position.x, y: me.position.y, kind: loopedBack ? 'originSelected' : 'origin' });
+    }
   }
-  const selectedKeys = new Set(highlights.filter((h) => h.kind === 'selected').map((h) => `${h.x},${h.y}`));
-  const dedupedHighlights = highlights.filter((h) => h.kind === 'selected' || !selectedKeys.has(`${h.x},${h.y}`));
-  const isCandidate = (pos: Position) => dedupedHighlights.some((h) => h.x === pos.x && h.y === pos.y);
+  // One highlight per tile, priority originSelected(blend) > selected > origin > candidate.
+  const rank: Record<HighlightKind, number> = { originSelected: 4, selected: 3, origin: 2, candidate: 1 };
+  const bestByTile = new Map<string, Highlight>();
+  for (const h of highlights) {
+    const key = `${h.x},${h.y}`;
+    const prev = bestByTile.get(key);
+    if (!prev || rank[h.kind] > rank[prev.kind]) bestByTile.set(key, h);
+  }
+  const dedupedHighlights = [...bestByTile.values()];
+  // A tile is clickable to place a fake move / aim a shot only if it's a fresh candidate.
+  const isCandidate = (pos: Position) =>
+    highlights.some((h) => h.kind === 'candidate' && h.x === pos.x && h.y === pos.y);
+  // A tile extends a move/reposition path if it's an affordable neighbor of the cursor —
+  // including already-selected (green) tiles, so you can revisit, up to the step limit.
+  const canExtend = (pos: Position) => extendKeys.has(`${pos.x},${pos.y}`);
 
   let previewHitTiles: Position[] = [];
   if (interactive && flow.kind === 'attackTarget' && flow.target) {
@@ -510,15 +553,17 @@ export function OnlineGame({
     if (!interactive) return;
     if (flow.kind === 'move') {
       const last = flow.path[flow.path.length - 1];
+      // Clicking the last step undoes it; any other affordable neighbor (new OR revisited)
+      // extends the path, capped by the step limit via `canExtend`.
       if (last && eq(last, pos)) setFlow({ kind: 'move', path: flow.path.slice(0, -1) });
-      else if (isCandidate(pos)) setFlow({ kind: 'move', path: [...flow.path, pos] });
+      else if (canExtend(pos)) setFlow({ kind: 'move', path: [...flow.path, pos] });
     } else if (flow.kind === 'fakeMove') {
       if (flow.target && eq(flow.target, pos)) setFlow({ kind: 'fakeMove', target: null });
       else if (isCandidate(pos)) setFlow({ kind: 'fakeMove', target: pos });
     } else if (flow.kind === 'attackReposition') {
       const last = flow.path[flow.path.length - 1];
       if (last && eq(last, pos)) setFlow({ kind: 'attackReposition', path: flow.path.slice(0, -1) });
-      else if (isCandidate(pos)) setFlow({ kind: 'attackReposition', path: [...flow.path, pos] });
+      else if (canExtend(pos)) setFlow({ kind: 'attackReposition', path: [...flow.path, pos] });
     } else if (flow.kind === 'attackTarget') {
       if (flow.target && eq(flow.target, pos)) setFlow({ kind: 'attackTarget', type: flow.type, path: flow.path, target: null });
       else if (isCandidate(pos)) setFlow({ kind: 'attackTarget', type: flow.type, path: flow.path, target: pos });
@@ -792,19 +837,6 @@ export function OnlineGame({
             </div>
           )}
         </div>
-      )}
-      {introActive && (
-        <div
-          style={{
-            position: 'fixed',
-            inset: 0,
-            background: '#000',
-            zIndex: 590,
-            opacity: introOpacity,
-            transition: `opacity ${introOpacity === 1 ? 5 : 3}s ease`,
-            pointerEvents: 'none',
-          }}
-        />
       )}
       {noticeStack}
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, marginBottom: 20, flexWrap: 'wrap' }}>

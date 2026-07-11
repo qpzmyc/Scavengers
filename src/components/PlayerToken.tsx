@@ -77,17 +77,17 @@ export function PlayerToken({ player, cellPixelSize, hideReal = false, death = n
         />
       );
     }
-    // Owner's view: real position shown translucent, fake shown solid.
+    // Owner's view: their real position stays solid; the fake decoy is shown translucent.
     return (
       <>
         <div
           data-testid={`token-${player.id}-real`}
-          style={tokenStyle(player.position.x, player.position.y, cellPixelSize, player.color, 0.35, immune)}
+          style={tokenStyle(player.position.x, player.position.y, cellPixelSize, player.color, 1, immune)}
         />
         <div
           data-testid={`token-${player.id}-phantom`}
           style={{
-            ...tokenStyle(player.phantomDisplayPosition.x, player.phantomDisplayPosition.y, cellPixelSize, player.color, 1),
+            ...tokenStyle(player.phantomDisplayPosition.x, player.phantomDisplayPosition.y, cellPixelSize, player.color, 0.35),
             ...(phantomAnim ? { animation: phantomAnim } : {}),
           }}
         />

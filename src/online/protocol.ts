@@ -28,6 +28,9 @@ export interface ActionEvent {
   // Players whose phantom (decoy) was caught in an attack's hit tiles but who survived
   // (their real position wasn't hit) — the attack only tagged the decoy.
   phantomHitPlayerIds: PlayerId[];
+  // Set when the mover walked their real character into this player's spawn zone,
+  // destroying the mover's own phantom in the process.
+  phantomSpawnOwnerId?: PlayerId;
 }
 
 // ---- Room party messages ----

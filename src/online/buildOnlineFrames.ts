@@ -54,6 +54,20 @@ export function buildOnlineFrames(before: GameState, after: GameState, event: Ac
   const actorId = event.actorId;
 
   if (req.kind === 'rest' || req.kind === 'fakeMove') {
+    if (req.kind === 'fakeMove' && event.killedPlayerIds.length) {
+      // The phantom landed on an enemy's real tile: fade the decoy in, then the death out.
+      const victims = victimsOf(before, after, event.killedPlayerIds);
+      return [
+        plainFrame(after, MOVE_STEP_MS),
+        {
+          display: after,
+          redTints: [],
+          death: victims.map((v) => ({ playerId: v.playerId, deathPos: v.deathPos, respawnPos: v.respawnPos, stage: 'out' as const })),
+          holdMs: DEATH_OUT_MS,
+        },
+        ...respawnFrame(after, victims),
+      ];
+    }
     return [plainFrame(after, RESULT_MS)];
   }
 

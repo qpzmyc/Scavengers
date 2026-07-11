@@ -158,6 +158,23 @@ export function OnlineSession({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [room.myPlayerId]);
 
+  // Once we're seated in the lobby, surface any server rejection (e.g. clicking Start Game
+  // when the game has already started) as a self-dismissing toast so it doesn't linger.
+  useEffect(() => {
+    if (room.myPlayerId && room.error) flashNotice(room.error);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [room.error]);
+
+  // Once the game actually starts, tear down any lingering lobby toast so a late/among
+  // rejection like "The game has already started." can't stay pinned over the intro/board.
+  useEffect(() => {
+    if (room.phase !== 'lobby') {
+      window.clearTimeout(noticeTimer.current);
+      setNotice(null);
+      setJoinNotice(null);
+    }
+  }, [room.phase]);
+
   // Join-result toast: only meaningful when arriving via join (no `create`), since a room we
   // just created has no ambiguity about whether the join succeeded.
   const [joinNotice, setJoinNotice] = useState<{ kind: 'success' | 'error'; text: string } | null>(null);
@@ -177,8 +194,65 @@ export function OnlineSession({
     }
   }, [create, room.myPlayerId, room.error]);
 
-  if (room.phase !== 'lobby') {
-    return <OnlineGame room={room} onLeave={onLeave} onEnterRoom={onEnterRoom} isHost={isHost} />;
+  // ---- Start-of-game intro sequence ----
+  // When the host starts the game, the room screen stays up and fades to black over 5s,
+  // then a big "Scavengers" title fades in over 2s, holds for 2s, and finally the board
+  // fades in over 3s while the title fades out — after which the first-turn randomizer runs.
+  // (A client that joins mid-game — phase already non-lobby at mount — skips the intro.)
+  const [introDone, setIntroDone] = useState(room.phase !== 'lobby');
+  const [showGame, setShowGame] = useState(room.phase !== 'lobby');
+  const [introMounted, setIntroMounted] = useState(false);
+  const [blackOp, setBlackOp] = useState(0);
+  const [blackDur, setBlackDur] = useState(5);
+  const [titleOp, setTitleOp] = useState(0);
+  const [titleDur, setTitleDur] = useState(2);
+  const introStartedRef = useRef(false);
+  const prevPhaseRef = useRef(room.phase);
+  useEffect(() => {
+    const prev = prevPhaseRef.current;
+    prevPhaseRef.current = room.phase;
+    if (prev !== 'lobby' || room.phase !== 'playing' || introStartedRef.current) return;
+    introStartedRef.current = true;
+    setIntroMounted(true);
+    const timers = [
+      window.setTimeout(() => setBlackOp(1), 50),                                              // 0–5s: room fades to black
+      // Flip showGame first: this moves the overlay into the game render branch, remounting it
+      // at opacity 0. Starting the title fade in the SAME commit would skip the transition, so
+      // raise titleOp one tick later, after the remounted node has painted its 0 state.
+      window.setTimeout(() => { setShowGame(true); setTitleDur(2); }, 5050),                    // 5s: mount game behind black
+      window.setTimeout(() => setTitleOp(1), 5200),                                             // 5–7s: title fades in
+      window.setTimeout(() => { setBlackDur(3); setBlackOp(0); setTitleDur(3); setTitleOp(0); }, 9050), // 9–12s: board fades in, title out
+      window.setTimeout(() => { setIntroMounted(false); setIntroDone(true); }, 12100),          // intro done → randomizer
+    ];
+    return () => timers.forEach((t) => window.clearTimeout(t));
+  }, [room.phase]);
+
+  const introOverlay = introMounted ? (
+    <div style={{ position: 'fixed', inset: 0, zIndex: 620, pointerEvents: 'none' }}>
+      <div style={{ position: 'absolute', inset: 0, background: '#000', opacity: blackOp, transition: `opacity ${blackDur}s ease` }} />
+      <div
+        style={{
+          position: 'absolute',
+          inset: 0,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          opacity: titleOp,
+          transition: `opacity ${titleDur}s ease`,
+        }}
+      >
+        <h1 style={{ fontSize: 96, fontWeight: 800, letterSpacing: 2, color: '#fff', margin: 0, textAlign: 'center' }}>Scavengers</h1>
+      </div>
+    </div>
+  ) : null;
+
+  if (room.phase !== 'lobby' && showGame) {
+    return (
+      <>
+        <OnlineGame room={room} onLeave={onLeave} onEnterRoom={onEnterRoom} isHost={isHost} introDone={introDone} />
+        {introOverlay}
+      </>
+    );
   }
 
   const title = room.visibility === 'private' ? 'Private Room' : 'Public Room';
@@ -192,6 +266,7 @@ export function OnlineSession({
 
   return (
     <div style={screenWrap}>
+      {introOverlay}
       <div style={{ display: 'flex', alignItems: 'center', gap: 16, width: 420, maxWidth: '100%' }}>
         <BackArrow onClick={() => setShowLeaveConfirm(true)} />
         <h1 style={{ fontSize: 36, margin: 0 }}>{title}</h1>

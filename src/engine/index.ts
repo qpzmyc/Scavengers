@@ -3,7 +3,7 @@ export * from './constants';
 export { buildBoard, isInBounds, getTile, isWall } from './board';
 export { createInitialGameState } from './state';
 export { movePlayer, restPlayer } from './movement';
-export { fakeMove, clearPhantom } from './phantom';
+export { fakeMove, clearPhantom, realOccupantsAt, spawnOwnerAt } from './phantom';
 export { punch, shoot, bomb, traceLine } from './combat';
 export { respawnPlayer, tickImmunity } from './respawn';
 export { applyKillScoring, incrementStreakScore } from './scoring';

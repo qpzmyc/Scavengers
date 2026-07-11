@@ -7,6 +7,9 @@ import {
   movePlayer,
   restPlayer,
   fakeMove,
+  clearPhantom,
+  realOccupantsAt,
+  spawnOwnerAt,
   punch,
   shoot,
   bomb,
@@ -26,7 +29,7 @@ import {
   maxMoveTilesForCount,
 } from './engine';
 import type { PlayerId } from './engine';
-import { Board, type Highlight, type RedTint, type DeathAnim } from './components/Board';
+import { Board, type Highlight, type HighlightKind, type RedTint, type DeathAnim } from './components/Board';
 import { ResourceBars, type ResourcePreview } from './components/ResourceBars';
 import { Leaderboard } from './components/Leaderboard';
 import { Lives } from './components/Lives';
@@ -254,7 +257,7 @@ function App() {
       {showMenuConfirm && (
         <ConfirmDialog
           title="Return to menu?"
-          message="Are you sure you want to quit to the menu? The current game will be lost."
+          message="Are you sure you want to quit to the menu?"
           confirmLabel="Quit to menu"
           onConfirm={() => { setShowMenuConfirm(false); backToMenu(); }}
           onCancel={() => setShowMenuConfirm(false)}
@@ -283,6 +286,11 @@ function App() {
 
   // ---- Highlights + click targeting (only while interactive) ----
   const highlights: Highlight[] = [];
+  // Tiles clickable to EXTEND a move/reposition path: every affordable, unblocked neighbor of
+  // the cursor — INCLUDING tiles already in the path (revisiting is allowed, e.g. up, up,
+  // down), but only while under the step limit. When at the limit this set is empty, so a
+  // green (already-selected) tile is only clickable when blue candidates also exist.
+  const extendKeys = new Set<string>();
   if (interactive) {
     if (flow.kind === 'move') {
       const cursor = flow.path.length ? flow.path[flow.path.length - 1] : me.position;
@@ -295,6 +303,7 @@ function App() {
           // tile, or a normal player's real tile). A phantom's true tile is NOT blocked
           // — it looks empty, and stepping onto it crushes them (handled on confirm).
           if (others.some((o) => eq(p, o.isPhantom && o.phantomDisplayPosition ? o.phantomDisplayPosition : o.position))) continue;
+          extendKeys.add(`${p.x},${p.y}`); // clickable whether it renders blue (new) or green (revisit)
           if (flow.path.some((s) => eq(s, p))) continue;
           highlights.push({ x: p.x, y: p.y, kind: 'candidate' });
         }
@@ -318,10 +327,14 @@ function App() {
           // tile, or a normal player's real tile). A phantom's true tile is NOT blocked
           // — it looks empty, and stepping onto it crushes them (handled on confirm).
           if (others.some((o) => eq(p, o.isPhantom && o.phantomDisplayPosition ? o.phantomDisplayPosition : o.position))) continue;
+          extendKeys.add(`${p.x},${p.y}`); // clickable whether it renders blue (new) or green (revisit)
           if (flow.path.some((s) => eq(s, p))) continue;
           highlights.push({ x: p.x, y: p.y, kind: 'candidate' });
         }
       }
+      flow.path.forEach((p) => highlights.push({ x: p.x, y: p.y, kind: 'selected' }));
+    } else if (flow.kind === 'attackSelect') {
+      // Choosing a weapon: keep the committed reposition path visible (no new candidates).
       flow.path.forEach((p) => highlights.push({ x: p.x, y: p.y, kind: 'selected' }));
     } else if (flow.kind === 'attackTarget') {
       const from = flow.path.length ? flow.path[flow.path.length - 1] : me.position;
@@ -336,10 +349,36 @@ function App() {
       for (const p of candidates) highlights.push({ x: p.x, y: p.y, kind: 'candidate' });
       if (flow.target) highlights.push({ x: flow.target.x, y: flow.target.y, kind: 'selected' });
     }
+    // Starting-square reference: while ANY action is being built (i.e. not on the
+    // 'menu' step), keep the turn's starting tile marked purple until confirm — so even a
+    // rest shows "no movement". If a move loops the preview back ONTO the start, that tile
+    // means both origin AND selected step, so it takes the green+purple blend instead.
+    if (flow.kind !== 'menu') {
+      const hasPath =
+        (flow.kind === 'move' || flow.kind === 'attackReposition' || flow.kind === 'attackSelect' || flow.kind === 'attackTarget') &&
+        flow.path.length > 0;
+      // Blend (green+purple) once the path has ever stepped onto the origin — and it stays
+      // blended even after walking off again (e.g. right, left, left), since the tile still
+      // carries both "start" and "was stepped on" meaning.
+      const loopedBack = hasPath && flow.path.some((s) => eq(s, me.position));
+      highlights.push({ x: me.position.x, y: me.position.y, kind: loopedBack ? 'originSelected' : 'origin' });
+    }
   }
-  const selectedKeys = new Set(highlights.filter((h) => h.kind === 'selected').map((h) => `${h.x},${h.y}`));
-  const dedupedHighlights = highlights.filter((h) => h.kind === 'selected' || !selectedKeys.has(`${h.x},${h.y}`));
-  const isCandidate = (pos: Position) => dedupedHighlights.some((h) => h.x === pos.x && h.y === pos.y);
+  // One highlight per tile, priority originSelected(blend) > selected > origin > candidate.
+  const rank: Record<HighlightKind, number> = { originSelected: 4, selected: 3, origin: 2, candidate: 1 };
+  const bestByTile = new Map<string, Highlight>();
+  for (const h of highlights) {
+    const key = `${h.x},${h.y}`;
+    const prev = bestByTile.get(key);
+    if (!prev || rank[h.kind] > rank[prev.kind]) bestByTile.set(key, h);
+  }
+  const dedupedHighlights = [...bestByTile.values()];
+  // A tile is clickable to place a fake move / aim a shot only if it's a fresh candidate.
+  const isCandidate = (pos: Position) =>
+    highlights.some((h) => h.kind === 'candidate' && h.x === pos.x && h.y === pos.y);
+  // A tile extends a move/reposition path if it's an affordable neighbor of the cursor —
+  // including already-selected (green) tiles, so you can revisit, up to the step limit.
+  const canExtend = (pos: Position) => extendKeys.has(`${pos.x},${pos.y}`);
 
   // While aiming (a target is chosen but not yet confirmed), continuously flash every
   // tile the shot would actually hit, so the player can preview the attack's area.
@@ -382,15 +421,17 @@ function App() {
     if (!interactive) return;
     if (flow.kind === 'move') {
       const last = flow.path[flow.path.length - 1];
+      // Clicking the last step undoes it; any other affordable neighbor (new OR revisited)
+      // extends the path, capped by the step limit via `canExtend`.
       if (last && eq(last, pos)) setFlow({ kind: 'move', path: flow.path.slice(0, -1) });
-      else if (isCandidate(pos)) setFlow({ kind: 'move', path: [...flow.path, pos] });
+      else if (canExtend(pos)) setFlow({ kind: 'move', path: [...flow.path, pos] });
     } else if (flow.kind === 'fakeMove') {
       if (flow.target && eq(flow.target, pos)) setFlow({ kind: 'fakeMove', target: null });
       else if (isCandidate(pos)) setFlow({ kind: 'fakeMove', target: pos });
     } else if (flow.kind === 'attackReposition') {
       const last = flow.path[flow.path.length - 1];
       if (last && eq(last, pos)) setFlow({ kind: 'attackReposition', path: flow.path.slice(0, -1) });
-      else if (isCandidate(pos)) setFlow({ kind: 'attackReposition', path: [...flow.path, pos] });
+      else if (canExtend(pos)) setFlow({ kind: 'attackReposition', path: [...flow.path, pos] });
     } else if (flow.kind === 'attackTarget') {
       if (flow.target && eq(flow.target, pos)) setFlow({ kind: 'attackTarget', type: flow.type, path: flow.path, target: null });
       else if (isCandidate(pos)) setFlow({ kind: 'attackTarget', type: flow.type, path: flow.path, target: pos });
@@ -545,11 +586,25 @@ function App() {
         // A phantom whose REAL tile the mover stepped onto gets crushed (the mover
         // can't see the hidden real position, so this is a lucky/guessed kill).
         const pathKeys = new Set(flow.path.map((p) => `${p.x},${p.y}`));
-        const squashedIds = state.turnOrder.filter((id) => {
+        const pathIds = state.turnOrder.filter((id) => {
           if (id === actorId) return false;
           const o = state.players[id];
           return o.alive && !o.eliminated && o.isPhantom && pathKeys.has(`${o.position.x},${o.position.y}`);
         });
+        // A phantom that followed the real move onto an enemy's real tile also crushes them.
+        const movedActor = moved.players[actorId];
+        const followIds = movedActor.isPhantom && movedActor.phantomDisplayPosition
+          ? realOccupantsAt(state, actorId, movedActor.phantomDisplayPosition)
+          : [];
+        const squashedIds = [...new Set([...pathIds, ...followIds])];
+
+        // Walking a real character into an enemy's spawn zone destroys THAT enemy's phantom
+        // (only if they have one out): e.g. green marches into red's corner and pops red's decoy.
+        let spawnOwner: PlayerId | null = null;
+        for (const step of flow.path) {
+          const o = spawnOwnerAt(state, step);
+          if (o && o !== actorId && state.players[o].isPhantom) { spawnOwner = o; break; }
+        }
 
         // Snap back to the real starting tile first (the live preview already showed the
         // destination), then step through the path so the whole walk plays out.
@@ -559,7 +614,9 @@ function App() {
         }
 
         if (squashedIds.length) {
-          let killedState = moved;
+          // On a crush, the mover loses any phantom they had down (Rule C).
+          let killedState = clearPhantom(moved, actorId);
+          if (spawnOwner) killedState = clearPhantom(killedState, spawnOwner);
           for (const id of squashedIds) {
             killedState = { ...killedState, players: { ...killedState.players, [id]: { ...killedState.players[id], alive: false } } };
           }
@@ -583,12 +640,20 @@ function App() {
           ];
           applyResult(acted, next, true, frames, victims, MOVE_STEP_MS * flow.path.length);
         } else {
-          const next = endTurn(moved, actorId, false);
+          // Entering an enemy spawn clears the SPAWN OWNER's phantom (no crush this branch).
+          const resolved = spawnOwner ? clearPhantom(moved, spawnOwner) : moved;
+          const next = endTurn(resolved, actorId, false);
           const frames: AnimFrame[] = [
             ...walkFrames,
-            plainFrame(moved, RESULT_MS),
+            plainFrame(resolved, RESULT_MS),
           ];
-          applyResult(moved, next, true, frames);
+          applyResult(resolved, next, true, frames);
+        }
+        if (spawnOwner) {
+          pushActionNotice(
+            `${state.players[actorId].color.toUpperCase()} destroyed ${state.players[spawnOwner].color.toUpperCase()}'s phantom`,
+            'phantom'
+          );
         }
       } else if (flow.kind === 'rest') {
         const acted = restPlayer(state, actorId);
@@ -596,7 +661,36 @@ function App() {
       } else if (flow.kind === 'fakeMove' && flow.target) {
         const dir = { x: flow.target.x - phantomBase.x, y: flow.target.y - phantomBase.y };
         const acted = fakeMove(state, actorId, dir);
-        applyResult(acted, endTurn(acted, actorId, false), true, [plainFrame(acted, RESULT_MS)]);
+        // A phantom fake-moved onto an enemy's real tile crushes them (a lucky/guessed kill).
+        const pos = acted.players[actorId].phantomDisplayPosition!;
+        const squashedIds = realOccupantsAt(state, actorId, pos);
+        if (squashedIds.length) {
+          let killedState = acted;
+          for (const id of squashedIds) {
+            killedState = { ...killedState, players: { ...killedState.players, [id]: { ...killedState.players[id], alive: false } } };
+          }
+          const resolved = resolveAttack({ state: killedState, killedPlayerIds: squashedIds }, actorId);
+          const next = endTurn(resolved, actorId, false); // a crush is a lucky/incidental kill → no extra turn
+          const victims = squashedIds.map((id) => ({
+            victimId: id,
+            deathPos: state.players[id].position,
+            respawnPos: resolved.players[id].eliminated ? null : resolved.players[id].position,
+            verb: 'crushed',
+          }));
+          const frames: AnimFrame[] = [
+            plainFrame(acted, MOVE_STEP_MS),
+            {
+              display: resolved,
+              redTints: [],
+              death: victims.map((v) => ({ playerId: v.victimId, deathPos: v.deathPos, respawnPos: v.respawnPos, stage: 'out' as const })),
+              holdMs: DEATH_OUT_MS,
+            },
+            ...buildRespawnFrames(resolved, victims),
+          ];
+          applyResult(resolved, next, true, frames, victims, MOVE_STEP_MS);
+        } else {
+          applyResult(acted, endTurn(acted, actorId, false), true, [plainFrame(acted, RESULT_MS)]);
+        }
       } else if (flow.kind === 'attackTarget' && flow.target) {
         const t = flow.target;
         // Optional reposition before the attack; the attack then originates from there.
@@ -709,7 +803,12 @@ function App() {
       // to a generic notice if the engine still rejects the confirmed action.
       let message = 'Cannot complete this action.';
       if (flow.kind === 'move') message = 'Not enough energy to move.';
-      else if (flow.kind === 'fakeMove') message = 'Not enough energy to fake move.';
+      else if (flow.kind === 'fakeMove') {
+        // The block-onto-enemy-phantom rejection carries a specific message; surface it.
+        message = err instanceof Error && /phantom is already there/i.test(err.message)
+          ? 'A phantom is already there.'
+          : 'Not enough energy to fake move.';
+      }
       else if (flow.kind === 'attackTarget') {
         message =
           flow.type === 'punch'

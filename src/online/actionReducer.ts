@@ -2,6 +2,9 @@ import {
   movePlayer,
   restPlayer,
   fakeMove,
+  clearPhantom,
+  realOccupantsAt,
+  spawnOwnerAt,
   punch,
   shoot,
   bomb,
@@ -33,20 +36,37 @@ export function applyAction(state: GameState, actorId: PlayerId, req: ActionRequ
         return o.alive && !o.eliminated && o.isPhantom && pathKeys.has(`${o.position.x},${o.position.y}`);
       });
       const moved = movePlayer(state, actorId, req.path);
-      if (squashedIds.length) {
-        let killedState = moved;
-        for (const id of squashedIds) {
+      // A phantom that followed the real move onto an enemy's real tile also crushes them.
+      const movedActor = moved.players[actorId];
+      const followIds = movedActor.isPhantom && movedActor.phantomDisplayPosition
+        ? realOccupantsAt(state, actorId, movedActor.phantomDisplayPosition)
+        : [];
+      const allSquashed = [...new Set([...squashedIds, ...followIds])];
+      // Walking a real character into an enemy's spawn zone destroys THAT enemy's phantom
+      // (only if they have one out): e.g. green marches into red's corner and pops red's decoy.
+      let spawnOwner: PlayerId | undefined;
+      for (const step of req.path) {
+        const o = spawnOwnerAt(state, step);
+        if (o && o !== actorId && state.players[o].isPhantom) { spawnOwner = o; break; }
+      }
+      // The mover loses their OWN phantom only on a crush (Rule C); the spawn owner's decoy
+      // (spawnOwner) is cleared separately.
+      let base = allSquashed.length ? clearPhantom(moved, actorId) : moved;
+      if (spawnOwner) base = clearPhantom(base, spawnOwner);
+      if (allSquashed.length) {
+        let killedState = base;
+        for (const id of allSquashed) {
           killedState = {
             ...killedState,
             players: { ...killedState.players, [id]: { ...killedState.players[id], alive: false } },
           };
         }
-        const acted = resolveAttack({ state: killedState, killedPlayerIds: squashedIds }, actorId);
+        const acted = resolveAttack({ state: killedState, killedPlayerIds: allSquashed }, actorId);
         const next = endTurn(acted, actorId, false); // a crush is incidental: no extra turn
-        return { ok: true, state: next, event: { actorId, request: req, killedPlayerIds: squashedIds, phantomHitPlayerIds: [] } };
+        return { ok: true, state: next, event: { actorId, request: req, killedPlayerIds: allSquashed, phantomHitPlayerIds: [], phantomSpawnOwnerId: spawnOwner } };
       }
-      const next = endTurn(moved, actorId, false);
-      return { ok: true, state: next, event: { actorId, request: req, killedPlayerIds: [], phantomHitPlayerIds: [] } };
+      const next = endTurn(base, actorId, false);
+      return { ok: true, state: next, event: { actorId, request: req, killedPlayerIds: [], phantomHitPlayerIds: [], phantomSpawnOwnerId: spawnOwner } };
     }
 
     if (req.kind === 'rest') {
@@ -56,7 +76,21 @@ export function applyAction(state: GameState, actorId: PlayerId, req: ActionRequ
     }
 
     if (req.kind === 'fakeMove') {
-      const acted = fakeMove(state, actorId, req.dir);
+      const acted = fakeMove(state, actorId, req.dir); // throws if it lands on an enemy phantom
+      const pos = acted.players[actorId].phantomDisplayPosition!;
+      const squashedIds = realOccupantsAt(state, actorId, pos);
+      if (squashedIds.length) {
+        let killedState = acted;
+        for (const id of squashedIds) {
+          killedState = {
+            ...killedState,
+            players: { ...killedState.players, [id]: { ...killedState.players[id], alive: false } },
+          };
+        }
+        const resolved = resolveAttack({ state: killedState, killedPlayerIds: squashedIds }, actorId);
+        const next = endTurn(resolved, actorId, false); // a crush is incidental: no extra turn
+        return { ok: true, state: next, event: { actorId, request: req, killedPlayerIds: squashedIds, phantomHitPlayerIds: [] } };
+      }
       const next = endTurn(acted, actorId, false);
       return { ok: true, state: next, event: { actorId, request: req, killedPlayerIds: [], phantomHitPlayerIds: [] } };
     }

@@ -3,7 +3,7 @@ import { GRID_SIZE, visionRadiusForCount } from '../engine';
 import { theme, SPAWN_TINT } from '../theme';
 import { PlayerToken } from './PlayerToken';
 
-export type HighlightKind = 'candidate' | 'selected';
+export type HighlightKind = 'candidate' | 'selected' | 'origin' | 'originSelected';
 
 export interface Highlight {
   x: number;
@@ -51,6 +51,8 @@ interface BoardProps {
 const HIGHLIGHT_STYLES: Record<HighlightKind, { background: string; border: string }> = {
   candidate: { background: theme.candidate, border: `2px solid ${theme.candidateBorder}` },
   selected: { background: theme.selected, border: `2px solid ${theme.selectedBorder}` },
+  origin: { background: theme.origin, border: `2px solid ${theme.originBorder}` },
+  originSelected: { background: theme.originSelected, border: `2px solid ${theme.originSelectedBorder}` },
 };
 
 const euclid = (a: Position, b: Position) => Math.hypot(a.x - b.x, a.y - b.y);

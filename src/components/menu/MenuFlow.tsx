@@ -228,9 +228,17 @@ export function MenuFlow({ onStartGame, onEnterRoom, initialGameType, initialScr
 
   // ---- Screen 1: game type (root, no back) ----
   if (screen === 'gameType') {
-    const typeBtn = (type: GameType, label: string) => (
+    const typeBtn = (type: GameType, label: string, disabled = false) => (
       <button
-        style={{ ...toggleBtn(false), padding: '18px 30px', fontSize: 18, margin: 0 }}
+        disabled={disabled}
+        style={{
+          ...toggleBtn(false),
+          padding: '18px 30px',
+          fontSize: 18,
+          margin: 0,
+          opacity: disabled ? 0.4 : 1,
+          cursor: disabled ? 'not-allowed' : 'pointer',
+        }}
         onClick={() => { setGameType(type); setScreen('settings'); }}
       >
         {label}
@@ -244,7 +252,7 @@ export function MenuFlow({ onStartGame, onEnterRoom, initialGameType, initialScr
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
             {typeBtn('online', 'Online')}
             {typeBtn('inPerson', 'In Person')}
-            {typeBtn('bots', 'Bots')}
+            {typeBtn('bots', 'CPU', true)}
           </div>
         </div>
       </div>
@@ -303,7 +311,7 @@ export function MenuFlow({ onStartGame, onEnterRoom, initialGameType, initialScr
         {gameType === 'online' ? (
           <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', justifyContent: 'center' }}>
             <button style={primaryBtn} onClick={() => setScreen('join')}>Join Game</button>
-            <button style={primaryBtn} onClick={() => setShowCreatePopup(true)}>Create Game</button>
+            <button style={primaryBtn} onClick={() => setShowCreatePopup(true)}>Create Room</button>
             <button style={primaryBtn} onClick={() => setShowNamePopup(true)}>Change Name</button>
           </div>
         ) : (
@@ -311,19 +319,19 @@ export function MenuFlow({ onStartGame, onEnterRoom, initialGameType, initialScr
         )}
 
         {showCreatePopup && (
-          <Modal title="Create Game" onClose={() => setShowCreatePopup(false)}>
+          <Modal title="Create Room" onClose={() => setShowCreatePopup(false)}>
             <div style={{ display: 'flex', gap: 16 }}>
               <button
                 style={primaryBtn}
                 onClick={() => onEnterRoom({ roomId: generateRoomCode(), create: { mode, count: playerCount, visibility: 'public', deathCap, targetScore } })}
               >
-                Create Public Room
+                Public Room
               </button>
               <button
                 style={primaryBtn}
                 onClick={() => onEnterRoom({ roomId: generateRoomCode(), create: { mode, count: playerCount, visibility: 'private', deathCap, targetScore } })}
               >
-                Create Private Room
+                Private Room
               </button>
             </div>
           </Modal>
