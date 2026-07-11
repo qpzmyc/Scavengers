@@ -38,6 +38,8 @@ import { MenuFlow } from './components/menu/MenuFlow';
 import type { EnterRoomConfig } from './components/menu/MenuFlow';
 import { OnlineSession } from './online/OnlineSession';
 import { ConfirmDialog } from './components/ConfirmDialog';
+import { loadLocalSave, saveLocalGame, clearLocalSave } from './game/localSave';
+import type { KillNotification } from './game/localSave';
 import { theme } from './theme';
 import {
   type AnimFrame,
@@ -121,10 +123,14 @@ function App() {
 
   // Persistent, stacked kill notifications shown top-right of the screen. Never
   // auto-dismissed — new kills are appended underneath older ones.
-  const [notifications, setNotifications] = useState<
-    { id: number; killerColor: string; killerName: string; victimColor: string; victimName: string; verb: string }[]
-  >([]);
+  const [notifications, setNotifications] = useState<KillNotification[]>([]);
   const notificationIdRef = useRef(0);
+  // Mirror of `notifications` so the (setTimeout-driven) local-save writes read the
+  // current kill feed without depending on React's async state flush.
+  const notificationsRef = useRef<KillNotification[]>([]);
+  useEffect(() => {
+    notificationsRef.current = notifications;
+  }, [notifications]);
 
   // Ephemeral sliding toast feed — independent of the persistent Kills panel above.
   // Used for "not enough X to Y" warnings and kill/extra-turn announcements. Each
@@ -198,6 +204,44 @@ function App() {
   // Lowercased set of every player's color name, for tinting color words in messages.
   const colorSet = new Set(state.turnOrder.map((id) => state.players[id].color.toLowerCase()));
 
+  // Persist the current in-person game at a settled turn boundary, so it can be resumed
+  // if the players quit (or close the tab) before it ends. `settledState` is the fully
+  // advanced logical state; the replay refs are read live. Never called for online games.
+  const persistLocal = (settledState: GameState) => {
+    saveLocalGame({
+      mode: settledState.mode,
+      state: settledState,
+      notifications: notificationsRef.current,
+      notificationId: notificationIdRef.current,
+      turnStart: turnStartRef.current,
+      pendingLog: pendingLogRef.current,
+      replay: replayRef.current,
+    });
+  };
+
+  const resumeGame = () => {
+    const save = loadLocalSave();
+    if (!save) return;
+    clearTimers();
+    setMode(save.mode);
+    setState(save.state);
+    setDisplay(save.state);
+    setNotifications(save.notifications);
+    notificationsRef.current = save.notifications;
+    notificationIdRef.current = save.notificationId;
+    actorLogRef.current = [];
+    turnStartRef.current = save.turnStart;
+    pendingLogRef.current = save.pendingLog;
+    replayRef.current = save.replay;
+    setRedTints([]);
+    setDeathAnims([]);
+    setActionNotices([]);
+    setFlow({ kind: 'menu' });
+    // Always land on the "___'s turn" handoff screen of whoever hadn't confirmed yet.
+    setPhase('handoff');
+    setRoute({ kind: 'game' });
+  };
+
   const startGame = (nextMode: GameMode, count: number, options?: { deathCap: number; targetScore: number }) => {
     clearTimers();
     const s = createInitialGameState(nextMode, count, options);
@@ -222,6 +266,10 @@ function App() {
     turnStartRef.current = starts;
     pendingLogRef.current = logs;
     replayRef.current = [];
+    notificationsRef.current = [];
+    // Persist the fresh game immediately (overwrites any previous save), so quitting
+    // even before the first confirmed action still leaves a resumable game.
+    persistLocal(s);
   };
 
   const backToMenu = () => {
@@ -527,6 +575,7 @@ function App() {
       setDeathAnims([]);
       setRedTints([]);
       if (next.winner !== null) {
+        clearLocalSave(); // finished games aren't resumable
         setPhase('playing'); // game over screen
       } else if (turnPasses) {
         // This actor has already watched their own turn live, so `next` becomes the
@@ -549,8 +598,12 @@ function App() {
           plainFrame(turnStartRef.current[nextId] ?? next, 0),
           ...(pendingLogRef.current[nextId] ?? []),
         ];
+        persistLocal(next); // settled handoff boundary → resumable at next player's turn
         setPhase('handoff');
       } else {
+        // Extra turn (kill streak): same actor keeps going. Snapshot here too so quitting
+        // mid-streak resumes at the start of this extra turn with the kill already counted.
+        persistLocal(next);
         setPhase('playing'); // extra turn — same actor keeps going
       }
     });
@@ -1067,6 +1120,7 @@ function App() {
           startGame(nextMode, count, options);
           setRoute({ kind: 'game' });
         }}
+        onResumeGame={resumeGame}
         onEnterRoom={(config) => setRoute({ kind: 'online', roomId: config.roomId, create: config.create, becomeHost: config.becomeHost, seat: config.seat })}
       />
     );

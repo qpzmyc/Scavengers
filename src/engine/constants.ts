@@ -59,7 +59,7 @@ export const MAX_DEATH_CAP = 6;
 // Per-player-count defaults: a fuller board (4p) is deadlier, so it wins on fewer
 // points and fewer lives; a 2p duel runs longer.
 export function defaultTargetScoreForCount(playerCount: number): number {
-  return playerCount >= 4 ? 30 : 20;
+  return playerCount >= 4 ? 50 : 30;
 }
 export function defaultDeathCapForCount(playerCount: number): number {
   return playerCount >= 4 ? 3 : 5;

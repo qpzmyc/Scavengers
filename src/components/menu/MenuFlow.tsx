@@ -18,6 +18,8 @@ import { Modal } from '../Modal';
 import { TextInputPopup } from '../TextInputPopup';
 import { BackArrow } from '../BackArrow';
 import { Toast } from '../Toast';
+import { ConfirmDialog } from '../ConfirmDialog';
+import { hasLocalSave } from '../../game/localSave';
 
 type GameType = 'online' | 'inPerson' | 'bots';
 type MenuScreen = 'gameType' | 'settings' | 'join';
@@ -36,6 +38,7 @@ export interface EnterRoomConfig {
 
 interface MenuFlowProps {
   onStartGame: (mode: GameMode, count: number, options: { deathCap: number; targetScore: number }) => void;
+  onResumeGame: () => void;
   onEnterRoom: (config: EnterRoomConfig) => void;
   // Where to land on mount — used when returning from a room via its back arrow, so the
   // player lands back on the online settings screen instead of the root game-type screen.
@@ -209,7 +212,7 @@ function JoinScreen({ onBack, onEnterRoom }: { onBack: () => void; onEnterRoom: 
   );
 }
 
-export function MenuFlow({ onStartGame, onEnterRoom, initialGameType, initialScreen }: MenuFlowProps) {
+export function MenuFlow({ onStartGame, onResumeGame, onEnterRoom, initialGameType, initialScreen }: MenuFlowProps) {
   const [screen, setScreen] = useState<MenuScreen>(initialScreen ?? 'gameType');
   const [gameType, setGameType] = useState<GameType>(initialGameType ?? 'inPerson');
   const [mode, setMode] = useState<GameMode>('lastStanding');
@@ -225,6 +228,17 @@ export function MenuFlow({ onStartGame, onEnterRoom, initialGameType, initialScr
   };
   const [showCreatePopup, setShowCreatePopup] = useState(false);
   const [showNamePopup, setShowNamePopup] = useState(false);
+  // Whether a resumable in-person game is saved on this device. Read once on mount
+  // (MenuFlow unmounts the moment a game starts/resumes, so it never goes stale here).
+  const [savedGameExists] = useState(hasLocalSave);
+  const [showStartOverConfirm, setShowStartOverConfirm] = useState(false);
+
+  const beginNewGame = () => onStartGame(mode, playerCount, { deathCap, targetScore });
+  // Starting a new in-person game wipes any saved one, so confirm first when one exists.
+  const handleStartClick = () => {
+    if (savedGameExists) setShowStartOverConfirm(true);
+    else beginNewGame();
+  };
 
   // ---- Screen 1: game type (root, no back) ----
   if (screen === 'gameType') {
@@ -315,7 +329,25 @@ export function MenuFlow({ onStartGame, onEnterRoom, initialGameType, initialScr
             <button style={primaryBtn} onClick={() => setShowNamePopup(true)}>Change Name</button>
           </div>
         ) : (
-          <button style={primaryBtn} onClick={() => onStartGame(mode, playerCount, { deathCap, targetScore })}>Start Game</button>
+          <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', justifyContent: 'center' }}>
+            <button style={primaryBtn} onClick={handleStartClick}>Start Game</button>
+            {savedGameExists && (
+              <button style={primaryBtn} onClick={onResumeGame}>Resume Game</button>
+            )}
+          </div>
+        )}
+
+        {showStartOverConfirm && (
+          <ConfirmDialog
+            title="Start game?"
+            message="This will delete the current saved game."
+            confirmLabel="Start"
+            onConfirm={() => {
+              setShowStartOverConfirm(false);
+              beginNewGame();
+            }}
+            onCancel={() => setShowStartOverConfirm(false)}
+          />
         )}
 
         {showCreatePopup && (
