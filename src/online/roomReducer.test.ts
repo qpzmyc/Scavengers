@@ -67,6 +67,24 @@ describe('roomReduce', () => {
     expect(second.out).toEqual([]);
   });
 
+  it('rematch: the first player into the successor room is temp host, then the previous host reclaims it on join', () => {
+    // Successor room the previous match rendezvoused at. B (a non-host from the old match)
+    // gets here first and, as the first seat, holds host temporarily.
+    let succ = roomInit('deathmatch', 2);
+    const bFirst = roomReduce(succ, { t: 'join', connId: 'B', issueToken: 'tokB2', seat: 'p2' });
+    succ = bFirst.model;
+    expect(succ.hostConnId).toBe('B'); // temp host until the real host shows up
+
+    // A was the previous match's host, so they rejoin with becomeHost and take host back,
+    // even though B was seated first.
+    const aJoin = roomReduce(succ, { t: 'join', connId: 'A', issueToken: 'tokA2', seat: 'p1', becomeHost: true });
+    succ = aJoin.model;
+    expect(succ.hostConnId).toBe('A');
+    // Both players keep their original colors (preferred seats honored).
+    expect(succ.slots.find((s) => s.connId === 'A')?.playerId).toBe('p1');
+    expect(succ.slots.find((s) => s.connId === 'B')?.playerId).toBe('p2');
+  });
+
   it('a join with becomeHost transfers host to the joiner even though they are not the first seat', () => {
     let m = roomInit('deathmatch', 2);
     m = roomReduce(m, { t: 'join', connId: 'A', issueToken: 'tokA' }).model; // A is host (first seat)
