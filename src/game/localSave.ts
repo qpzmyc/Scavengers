@@ -41,7 +41,7 @@ export function loadLocalSave(): LocalSave | null {
     const raw = localStorage.getItem(KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw) as LocalSave;
-    if (!parsed || parsed.version !== VERSION || !parsed.state || parsed.state.winner !== null) return null;
+    if (!parsed || parsed.version !== VERSION || !parsed.state || parsed.state.winner !== null || parsed.state.draw != null) return null;
     return parsed;
   } catch {
     return null;

@@ -10,4 +10,4 @@ export { applyKillScoring, incrementStreakScore } from './scoring';
 export { checkWinCondition } from './winCondition';
 export { resolveAttack, endTurn } from './turns';
 export type { AttackResult } from './turns';
-export { tickPickups, getEnergyCandidateCells, getAmmoCandidateCells } from './pickups';
+export { tickPickups, getEnergyCandidateCells, getAmmoCandidateCells, spawnRespawnCornerPickup } from './pickups';

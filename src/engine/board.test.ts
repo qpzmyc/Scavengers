@@ -77,6 +77,21 @@ describe('buildBoard', () => {
     expect(ammoCount).toBe(4);
   });
 
+  it('always lays the 4-player ammo pickups in a "+" around the center wall', () => {
+    // Deterministic layout, so it holds across many builds.
+    for (let i = 0; i < 20; i++) {
+      const board = buildBoard(4);
+      expect(getTile(board, { x: 5, y: 4 }).type).toBe('ammoPickup');
+      expect(getTile(board, { x: 5, y: 6 }).type).toBe('ammoPickup');
+      expect(getTile(board, { x: 4, y: 5 }).type).toBe('ammoPickup');
+      expect(getTile(board, { x: 6, y: 5 }).type).toBe('ammoPickup');
+      // The diagonal central cells stay empty.
+      for (const c of [{ x: 4, y: 4 }, { x: 6, y: 4 }, { x: 4, y: 6 }, { x: 6, y: 6 }]) {
+        expect(getTile(board, c).type).toBe('empty');
+      }
+    }
+  });
+
   it('never places an ammo pickup on the center wall cell', () => {
     const board = buildBoard();
     expect(getTile(board, { x: 5, y: 5 }).type).toBe('wall');

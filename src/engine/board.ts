@@ -24,22 +24,30 @@ export function buildBoard(playerCount: number = 2): Tile[][] {
   // Dead center -> wall
   set(5, 5, 'wall');
 
-  // Random distinct cells within the central 3x3 (excluding center wall) -> ammo pickups.
-  // Count scales with player count (see ammoPickupCountForCount).
-  const centralCells: Position[] = [];
-  for (let x = 4; x <= 6; x++) {
-    for (let y = 4; y <= 6; y++) {
-      if (x === 5 && y === 5) continue;
-      centralCells.push({ x, y });
+  // Ammo pickups within the central 3x3. Count scales with player count.
+  if (playerCount >= 4) {
+    // 4-player games always start with the four ammo pickups in a fixed "+" around the
+    // center wall (its orthogonal neighbors), for a symmetric, fair opening.
+    for (const cell of [{ x: 5, y: 4 }, { x: 5, y: 6 }, { x: 4, y: 5 }, { x: 6, y: 5 }]) {
+      set(cell.x, cell.y, 'ammoPickup');
     }
-  }
-  const shuffled = centralCells.slice();
-  for (let i = shuffled.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-  }
-  for (const cell of shuffled.slice(0, ammoPickupCountForCount(playerCount))) {
-    set(cell.x, cell.y, 'ammoPickup');
+  } else {
+    // Random distinct cells within the central 3x3 (excluding center wall).
+    const centralCells: Position[] = [];
+    for (let x = 4; x <= 6; x++) {
+      for (let y = 4; y <= 6; y++) {
+        if (x === 5 && y === 5) continue;
+        centralCells.push({ x, y });
+      }
+    }
+    const shuffled = centralCells.slice();
+    for (let i = shuffled.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    }
+    for (const cell of shuffled.slice(0, ammoPickupCountForCount(playerCount))) {
+      set(cell.x, cell.y, 'ammoPickup');
+    }
   }
 
   // Edge-midpoint walls

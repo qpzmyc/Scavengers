@@ -77,8 +77,10 @@ export function createInitialGameState(
     currentTurn: 'p1',
     mode,
     winner: null,
+    draw: null,
     deathCap: options?.deathCap ?? defaultDeathCapForCount(playerCount),
     targetScore: options?.targetScore ?? defaultTargetScoreForCount(playerCount),
     pendingPickups: [],
+    pendingCornerPickups: [],
   };
 }

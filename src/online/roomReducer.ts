@@ -240,7 +240,7 @@ export function roomReduce(model: RoomModel, input: RoomInput): RoomStep {
       if (!slot) return { model, out: [err(input.connId, 'You are not seated in this room.')] };
       const res = applyAction(model.state, slot.playerId, input.request);
       if (!res.ok) return { model, out: [err(input.connId, res.error)] };
-      const over = res.state.winner !== null;
+      const over = res.state.winner !== null || res.state.draw != null;
       const next: RoomModel = { ...model, state: res.state, phase: over ? 'over' : 'playing' };
       const out: Outbound[] = [{ to: 'all', msg: { type: 'state', state: res.state, event: res.event } }];
       if (over) out.push({ to: 'all', msg: { type: 'over', state: res.state } });

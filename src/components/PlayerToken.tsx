@@ -50,6 +50,27 @@ function tokenStyle(
   };
 }
 
+// The pulsing halo color, reused for the countdown digit so it reads as "the same signal".
+const IMMUNE_TEXT_COLOR = 'rgba(120,230,255,0.95)';
+
+const immuneBadgeStyle: React.CSSProperties = {
+  position: 'absolute',
+  inset: 0,
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  color: IMMUNE_TEXT_COLOR,
+  fontWeight: 700,
+  fontSize: '1.5em',
+  lineHeight: 1,
+  pointerEvents: 'none',
+  textShadow: '-1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000, 0 0 2px #000',
+};
+
+function ImmuneBadge({ turns }: { turns: number }) {
+  return <span style={immuneBadgeStyle}>{turns}</span>;
+}
+
 export function PlayerToken({ player, cellPixelSize, hideReal = false, death = null, phantomPulsing = false }: PlayerTokenProps) {
   if (!player.alive) return null;
   const immune = player.immuneTurns > 0;
@@ -69,12 +90,16 @@ export function PlayerToken({ player, cellPixelSize, hideReal = false, death = n
 
   if (player.isPhantom && player.phantomDisplayPosition) {
     // Opponent's view: only the fake (solid) token is visible — the real position is hidden.
+    // It still carries the immunity halo/badge when the owner is immune, so an immune
+    // player's phantom looks identical to their real token and doesn't give itself away.
     if (hideReal) {
       return (
         <div
           data-testid={`token-${player.id}-phantom`}
-          style={tokenStyle(player.phantomDisplayPosition.x, player.phantomDisplayPosition.y, cellPixelSize, player.color, 1)}
-        />
+          style={tokenStyle(player.phantomDisplayPosition.x, player.phantomDisplayPosition.y, cellPixelSize, player.color, 1, immune)}
+        >
+          {immune && <ImmuneBadge turns={player.immuneTurns} />}
+        </div>
       );
     }
     // Owner's view: their real position stays solid; the fake decoy is shown translucent.
@@ -83,14 +108,18 @@ export function PlayerToken({ player, cellPixelSize, hideReal = false, death = n
         <div
           data-testid={`token-${player.id}-real`}
           style={tokenStyle(player.position.x, player.position.y, cellPixelSize, player.color, 1, immune)}
-        />
+        >
+          {immune && <ImmuneBadge turns={player.immuneTurns} />}
+        </div>
         <div
           data-testid={`token-${player.id}-phantom`}
           style={{
-            ...tokenStyle(player.phantomDisplayPosition.x, player.phantomDisplayPosition.y, cellPixelSize, player.color, 0.35),
+            ...tokenStyle(player.phantomDisplayPosition.x, player.phantomDisplayPosition.y, cellPixelSize, player.color, 0.35, immune),
             ...(phantomAnim ? { animation: phantomAnim } : {}),
           }}
-        />
+        >
+          {immune && <ImmuneBadge turns={player.immuneTurns} />}
+        </div>
       </>
     );
   }
@@ -99,6 +128,8 @@ export function PlayerToken({ player, cellPixelSize, hideReal = false, death = n
     <div
       data-testid={`token-${player.id}`}
       style={tokenStyle(player.position.x, player.position.y, cellPixelSize, player.color, 1, immune)}
-    />
+    >
+      {immune && <ImmuneBadge turns={player.immuneTurns} />}
+    </div>
   );
 }

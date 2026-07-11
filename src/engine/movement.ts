@@ -47,6 +47,11 @@ export function movePlayer(state: GameState, playerId: PlayerId, path: Position[
       energy = Math.min(MAX_ENERGY, energy + ENERGY_PICKUP_VALUE);
       board[step.y][step.x] = { type: 'empty' };
       pendingPickups = [...pendingPickups, { type: 'energyPickup', pliesRemaining: PICKUP_RESPAWN_PLIES }];
+    } else if (tile.type === 'bonusEnergyPickup') {
+      // A one-shot corner bonus: gives the same energy, but doesn't queue a
+      // respawn ticket — it's outside the normal pendingPickups ring cycle.
+      energy = Math.min(MAX_ENERGY, energy + ENERGY_PICKUP_VALUE);
+      board[step.y][step.x] = { type: 'empty' };
     } else if (tile.type === 'ammoPickup') {
       ammo = Math.min(MAX_AMMO, ammo + 1);
       board[step.y][step.x] = { type: 'empty' };

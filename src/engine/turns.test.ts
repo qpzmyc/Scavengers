@@ -26,6 +26,17 @@ describe('resolveAttack', () => {
     expect(next.players.p2.immuneTurns).toBeGreaterThan(0);
   });
 
+  it('queues the respawn corner pickup instead of spawning it immediately', () => {
+    let state = createInitialGameState('deathmatch');
+    state = withPositions(state, { x: 5, y: 6 }, { x: 5, y: 7 });
+    state = { ...state, board: state.board.map((row) => row.map((t) => (t.type === 'energyPickup' ? { type: 'empty' as const } : t))) };
+    const attackResult = punch(state, 'p1', { x: 5, y: 7 });
+    const next = resolveAttack(attackResult, 'p1');
+    // p2's cornerZone is the bottom-right corner -> central-5x5 corner (7,7).
+    expect(next.board[7][7].type).toBe('empty');
+    expect(next.pendingCornerPickups).toEqual(['p2']);
+  });
+
   it('sets winner when the kill reaches the death cap in lastStanding mode', () => {
     let state = createInitialGameState('lastStanding');
     state = withPositions(state, { x: 5, y: 6 }, { x: 5, y: 7 });
@@ -33,6 +44,34 @@ describe('resolveAttack', () => {
     const attackResult = punch(state, 'p1', { x: 5, y: 7 });
     const next = resolveAttack(attackResult, 'p1');
     expect(next.winner).toBe('p1');
+  });
+
+  it('records a survival draw listing all finalists when one blast eliminates everyone left', () => {
+    let state = createInitialGameState('lastStanding');
+    state = {
+      ...state,
+      players: {
+        ...state.players,
+        p1: { ...state.players.p1, deaths: state.deathCap - 1 },
+        p2: { ...state.players.p2, deaths: state.deathCap - 1 },
+      },
+    };
+    // A bomb catching the thrower (p1) and the last opponent (p2), both on their last
+    // life: everyone is eliminated at once -> draw between both.
+    const next = resolveAttack({ state, killedPlayerIds: ['p1', 'p2'] }, 'p1');
+    expect(next.draw).toEqual(['p1', 'p2']);
+    expect(next.winner).toBeNull();
+  });
+
+  it('is a normal win, not a draw, when the thrower survives the final blast', () => {
+    let state = createInitialGameState('lastStanding');
+    state = {
+      ...state,
+      players: { ...state.players, p2: { ...state.players.p2, deaths: state.deathCap - 1 } },
+    };
+    const next = resolveAttack({ state, killedPlayerIds: ['p2'] }, 'p1');
+    expect(next.winner).toBe('p1');
+    expect(next.draw).toBeNull();
   });
 
   it('leaves winner null and state mostly unchanged if no kill occurred', () => {
@@ -76,5 +115,63 @@ describe('endTurn', () => {
     const state = createInitialGameState('deathmatch');
     const next = endTurn(state, 'p1', false);
     expect(next.players.p1.currentStreak).toBe(1);
+  });
+
+  it('does not flush a queued corner pickup while the extra turn continues (gotKill true)', () => {
+    let state = createInitialGameState('deathmatch');
+    state = {
+      ...state,
+      board: state.board.map((row) => row.map((t) => (t.type === 'energyPickup' ? { type: 'empty' as const } : t))),
+      pendingCornerPickups: ['p2'],
+    };
+    const next = endTurn(state, 'p1', true);
+    expect(next.board[7][7].type).toBe('empty');
+    expect(next.pendingCornerPickups).toEqual(['p2']);
+  });
+
+  it('flushes a queued corner pickup once the turn actually passes', () => {
+    let state = createInitialGameState('deathmatch');
+    state = {
+      ...state,
+      board: state.board.map((row) => row.map((t) => (t.type === 'energyPickup' ? { type: 'empty' as const } : t))),
+      pendingCornerPickups: ['p2'],
+    };
+    const next = endTurn(state, 'p1', false);
+    expect(next.board[7][7].type).toBe('bonusEnergyPickup');
+    expect(next.pendingCornerPickups).toEqual([]);
+  });
+
+  it("spawns the self-killer's own corner bonus before their extra turn (gotKill)", () => {
+    let state = createInitialGameState('deathmatch');
+    state = {
+      ...state,
+      board: state.board.map((row) => row.map((t) => (t.type === 'energyPickup' ? { type: 'empty' as const } : t))),
+      pendingCornerPickups: ['p1'],
+    };
+    // p1 bombed themselves, respawned, and got an extra turn. The turn before their next
+    // is their own, so their corner (3,3) bonus spawns now.
+    const next = endTurn(state, 'p1', true);
+    expect(next.board[3][3].type).toBe('bonusEnergyPickup');
+    expect(next.pendingCornerPickups).toEqual([]);
+  });
+
+  it('spawns each queued corner pickup only as the turn reaches its owner, not all at once', () => {
+    let state = createInitialGameState('lastStanding', 4);
+    state = {
+      ...state,
+      board: state.board.map((row) => row.map((t) => (t.type === 'energyPickup' ? { type: 'empty' as const } : t))),
+      pendingCornerPickups: ['p2', 'p3'],
+    };
+    // 4-player turn order is p1 -> p3 -> p2 -> p4. p1 ends -> next is p3, so only
+    // p3's corner (7,3) spawns; p2 stays queued.
+    const afterP1 = endTurn(state, 'p1', false);
+    expect(afterP1.board[3][7].type).toBe('bonusEnergyPickup');
+    expect(afterP1.board[7][7].type).toBe('empty');
+    expect(afterP1.pendingCornerPickups).toEqual(['p2']);
+
+    // p3 ends -> next is p2, so p2's corner (7,7) now spawns and the queue empties.
+    const afterP3 = endTurn(afterP1, 'p3', false);
+    expect(afterP3.board[7][7].type).toBe('bonusEnergyPickup');
+    expect(afterP3.pendingCornerPickups).toEqual([]);
   });
 });

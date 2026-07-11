@@ -1,4 +1,4 @@
-import type { GameState, Position, PendingPickup } from './types';
+import type { GameState, Position, PendingPickup, PlayerId } from './types';
 import { getTile } from './board';
 
 function isCellFree(state: GameState, pos: Position): boolean {
@@ -36,6 +36,29 @@ export function getAmmoCandidateCells(state: GameState): Position[] {
     }
   }
   return cells;
+}
+
+// The bonus energy pickup that sits in `playerId`'s corner of the central 5x5 (one of
+// (3,3)/(7,3)/(3,7)/(7,7), matching their cornerZone). Placed fresh the instant a
+// player respawns, ahead of their first turn back — entirely independent of the
+// regular pendingPickups respawn cycle (see the 'bonusEnergyPickup' tile type), so
+// it never interacts with or inflates the normal 4-pickup ring supply. Silently
+// no-ops if another player is standing on that tile, or if a pickup (normal or a
+// still-uncollected bonus from an earlier death) is already sitting there — a
+// corner can hold at most one at a time, which is what actually bounds the total.
+export function spawnRespawnCornerPickup(state: GameState, playerId: PlayerId): GameState {
+  const zone = state.players[playerId].cornerZone;
+  const pos: Position = { x: zone.x0 === 0 ? 3 : 7, y: zone.y0 === 0 ? 3 : 7 };
+  for (const id of state.turnOrder) {
+    const p = state.players[id];
+    if (p.alive && p.position.x === pos.x && p.position.y === pos.y) return state;
+  }
+  const existingType = getTile(state.board, pos).type;
+  if (existingType === 'energyPickup' || existingType === 'bonusEnergyPickup') return state;
+
+  const board = state.board.map((row) => row.slice());
+  board[pos.y][pos.x] = { type: 'bonusEnergyPickup' };
+  return { ...state, board };
 }
 
 function pickRandom<T>(items: T[]): T | null {

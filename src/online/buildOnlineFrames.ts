@@ -21,6 +21,27 @@ interface Victim {
   respawnPos: Position | null;
 }
 
+const PICKUP_TYPES = new Set(['energyPickup', 'bonusEnergyPickup', 'ammoPickup']);
+
+// `after` bakes in any pickups that spawned this transition (a respawn corner bonus,
+// or a normal pickup resurfacing via tickPickups). Reverting those tiles to their
+// pre-transition state for the ANIMATION frames keeps a freshly-spawned pickup hidden
+// until the final commit reveals it — so it pops in exactly as control hands over
+// (after the frame's hold), not the instant the last frame starts playing.
+function maskFreshPickups(before: GameState, after: GameState): GameState {
+  let board: GameState['board'] | null = null;
+  for (let y = 0; y < after.board.length; y++) {
+    for (let x = 0; x < after.board[y].length; x++) {
+      const a = after.board[y][x];
+      if (PICKUP_TYPES.has(a.type) && a.type !== before.board[y][x].type) {
+        if (!board) board = after.board.map((row) => row.slice());
+        board[y][x] = before.board[y][x];
+      }
+    }
+  }
+  return board ? { ...after, board } : after;
+}
+
 // Death fade-out frame(s) + respawn fade-in frame for the victims of an action.
 // `after` already reflects each victim's resolved (respawned or eliminated) position,
 // so the 'out' frame must carry the fade from the start (mirrors App.tsx).
@@ -52,23 +73,26 @@ function respawnFrame(after: GameState, victims: Victim[]): AnimFrame[] {
 export function buildOnlineFrames(before: GameState, after: GameState, event: ActionEvent): AnimFrame[] {
   const req = event.request;
   const actorId = event.actorId;
+  // Board shown DURING the animation: identical to `after` but with any pickups that
+  // spawned this transition held back, so they only surface at the final commit.
+  const disp = maskFreshPickups(before, after);
 
   if (req.kind === 'rest' || req.kind === 'fakeMove') {
     if (req.kind === 'fakeMove' && event.killedPlayerIds.length) {
       // The phantom landed on an enemy's real tile: fade the decoy in, then the death out.
       const victims = victimsOf(before, after, event.killedPlayerIds);
       return [
-        plainFrame(after, MOVE_STEP_MS),
+        plainFrame(disp, MOVE_STEP_MS),
         {
-          display: after,
+          display: disp,
           redTints: [],
           death: victims.map((v) => ({ playerId: v.playerId, deathPos: v.deathPos, respawnPos: v.respawnPos, stage: 'out' as const })),
           holdMs: DEATH_OUT_MS,
         },
-        ...respawnFrame(after, victims),
+        ...respawnFrame(disp, victims),
       ];
     }
-    return [plainFrame(after, RESULT_MS)];
+    return [plainFrame(disp, RESULT_MS)];
   }
 
   if (req.kind === 'move') {
@@ -81,14 +105,14 @@ export function buildOnlineFrames(before: GameState, after: GameState, event: Ac
       // Phantom-crush: no ripple, just the death fade on the after-state.
       const victims = victimsOf(before, after, event.killedPlayerIds);
       frames.push({
-        display: after,
+        display: disp,
         redTints: [],
         death: victims.map((v) => ({ playerId: v.playerId, deathPos: v.deathPos, respawnPos: v.respawnPos, stage: 'out' as const })),
         holdMs: Math.max(MOVE_STEP_MS, DEATH_OUT_MS),
       });
-      frames.push(...respawnFrame(after, victims));
+      frames.push(...respawnFrame(disp, victims));
     } else {
-      frames.push(plainFrame(after, RESULT_MS));
+      frames.push(plainFrame(disp, RESULT_MS));
     }
     return frames;
   }
@@ -108,15 +132,15 @@ export function buildOnlineFrames(before: GameState, after: GameState, event: Ac
     const victims = victimsOf(before, after, event.killedPlayerIds);
     const death: DeathAnim[] = victims.map((v) => ({ playerId: v.playerId, deathPos: v.deathPos, respawnPos: v.respawnPos, stage: 'out' as const }));
     frames.push({
-      display: after,
+      display: disp,
       redTints: tints,
       death,
       holdMs: Math.max(maxTintDelay + TINT_FADE_MS + TINT_HOLD_MS, DEATH_OUT_MS),
     });
-    frames.push(...respawnFrame(after, victims));
+    frames.push(...respawnFrame(disp, victims));
   } else {
     frames.push({
-      display: after,
+      display: disp,
       redTints: tints,
       death: [],
       holdMs: Math.max(RESULT_MS, maxTintDelay + TINT_FADE_MS + TINT_HOLD_MS),

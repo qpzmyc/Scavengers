@@ -63,7 +63,7 @@ function simulateEnergyAfterPath(board: GameState['board'], startEnergy: number,
   for (const p of path) {
     energy -= MOVE_ENERGY_COST_PER_TILE;
     const tile = board[p.y]?.[p.x];
-    if (tile && tile.type === 'energyPickup') {
+    if (tile && (tile.type === 'energyPickup' || tile.type === 'bonusEnergyPickup')) {
       energy = Math.min(MAX_ENERGY, energy + ENERGY_PICKUP_VALUE);
     }
   }
@@ -129,6 +129,10 @@ export function OnlineGame({
 
   // Win sequence: fade to black slowly, then reveal the win screen.
   const winnerId = room.state?.winner ?? null;
+  // Non-null on a survival draw (everyone caught in one final blast). Drives the same
+  // win sequence as a normal win, but the screen lists every finalist.
+  const drawIds = room.state?.draw ?? null;
+  const gameEnded = winnerId !== null || drawIds != null;
   const [winFadeIn, setWinFadeIn] = useState(false);
   const [winScreen, setWinScreen] = useState(false);
   const [winContentIn, setWinContentIn] = useState(false);
@@ -136,17 +140,17 @@ export function OnlineGame({
     // Wait for the kill/death animation to finish playing before starting the fade,
     // so the win screen never covers a still-animating board. Then the board fades to
     // black over 5s, and only after that does the win screen fade in over 3s.
-    if (winnerId === null || animating) return;
+    if (!gameEnded || animating) return;
     const t1 = window.setTimeout(() => setWinFadeIn(true), 50);
     const t2 = window.setTimeout(() => setWinScreen(true), 5050);
     const t3 = window.setTimeout(() => setWinContentIn(true), 5100);
     return () => { window.clearTimeout(t1); window.clearTimeout(t2); window.clearTimeout(t3); };
-  }, [winnerId, animating]);
+  }, [gameEnded, animating]);
 
   // The host's "End Match" (from the reconnecting screen) ends the game with no winner;
   // send everyone back to the menu instead of leaving them on a blank over-state screen.
   useEffect(() => {
-    if (room.phase === 'over' && room.state && room.state.winner === null) onLeave();
+    if (room.phase === 'over' && room.state && room.state.winner === null && room.state.draw == null) onLeave();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [room.phase]);
 
@@ -239,11 +243,14 @@ export function OnlineGame({
     return entry?.name || color.toUpperCase();
   };
   // Renders a player for viewer-aware notification text: the viewer sees "You"/"you"
-  // (capitalized only when sentenceStart is true) for themselves, and nameFor(id) otherwise.
+  // (capitalized only when sentenceStart is true) for themself, and nameFor(id) otherwise.
   const describe = (id: PlayerId, sentenceStart: boolean): string => {
     if (id === room.myPlayerId) return sentenceStart ? 'You' : 'you';
     return nameFor(id);
   };
+  // Reflexive pronoun for a self-kill: the viewer killing themselves reads "yourself",
+  // everyone else reads "themself".
+  const reflexive = (id: PlayerId): string => (id === room.myPlayerId ? 'yourself' : 'themself');
 
   // ---- Incoming-transition effect: snaps or animates whenever room.state/lastEvent change ----
   useEffect(() => {
@@ -292,12 +299,14 @@ export function OnlineGame({
           const subject = colorName(event.actorId, describe(event.actorId, true), after);
           let content: ReactNode;
           if (selfKill) {
-            content = <>{subject} {verb} themselves!</>;
+            content = <>{subject} {verb} {colorName(event.actorId, reflexive(event.actorId), after)}!</>;
           } else {
             const victims = event.killedPlayerIds.map((id, i) => (
-              <Fragment key={id}>{i > 0 ? ', ' : ''}{colorName(id, describe(id, false), after)}</Fragment>
+              // In a group kill the attacker can be among the victims (e.g. their own
+              // bomb) — that entry reads as the reflexive pronoun, not "you".
+              <Fragment key={id}>{i > 0 ? ', ' : ''}{colorName(id, id === event.actorId ? reflexive(id) : describe(id, false), after)}</Fragment>
             ));
-            const suffix = after.winner === null && verb !== 'crushed' ? ' — +1 extra turn!' : '!';
+            const suffix = after.winner === null && after.draw == null && verb !== 'crushed' ? ' — +1 extra turn!' : '!';
             content = <>{subject} {verb} {victims}{suffix}</>;
           }
           pushActionNotice(content, 'kill');
@@ -416,10 +425,10 @@ export function OnlineGame({
   const me = state.players[viewerId];
   const others = state.turnOrder.filter((id) => id !== viewerId).map((id) => state.players[id]);
   const myTurn = state.currentTurn === viewerId;
-  const gameOver = state.winner !== null;
+  const gameOver = state.winner !== null || state.draw != null;
   // `revealing` gates interactivity too: showing the chosen player's action panel during
   // the first-turn reveal would leak who was picked before the animation finishes.
-  const interactive = myTurn && !animating && !sending && !revealing && room.phase === 'playing' && state.winner === null;
+  const interactive = myTurn && !animating && !sending && !revealing && room.phase === 'playing' && state.winner === null && state.draw == null;
 
   const canPunch = me.energy >= PUNCH_ENERGY_COST;
   const canShoot = me.ammo >= SHOOT_AMMO_COST && me.energy >= ATTACK_ENERGY_COST;
@@ -762,7 +771,7 @@ export function OnlineGame({
           </div>
         </div>
       )}
-      {winnerId !== null && (
+      {gameEnded && (
         <div
           style={{
             position: 'fixed',
@@ -793,7 +802,15 @@ export function OnlineGame({
               }}
             >
               <h1 style={{ fontSize: 48, margin: 0, textAlign: 'center' }}>
-                {colorName(winnerId, nameFor(winnerId), state)} Wins!
+                {drawIds ? (
+                  <>
+                    {drawIds.map((id, i) => (
+                      <Fragment key={id}>{i > 0 ? ', ' : ''}{colorName(id, nameFor(id), state)}</Fragment>
+                    ))}{' '}Win!
+                  </>
+                ) : (
+                  <>{colorName(winnerId!, nameFor(winnerId!), state)} Wins!</>
+                )}
               </h1>
               <div style={{ transform: 'scale(1.1)', transformOrigin: 'top center' }}>
                 {state.mode === 'lastStanding' ? <Lives state={state} displayName={nameFor} /> : <Leaderboard state={state} displayName={nameFor} />}
@@ -813,11 +830,11 @@ export function OnlineGame({
                     room.successorRoomCode
                       ? { roomId: code, becomeHost: isHost, seat }
                       : {
-                          roomId: code,
-                          create: { mode: room.mode, count: room.playerCount, visibility: room.visibility, deathCap: room.deathCap, targetScore: room.targetScore },
-                          becomeHost: isHost,
-                          seat,
-                        },
+                        roomId: code,
+                        create: { mode: room.mode, count: room.playerCount, visibility: room.visibility, deathCap: room.deathCap, targetScore: room.targetScore },
+                        becomeHost: isHost,
+                        seat,
+                      },
                   );
                 }}
                 style={{
@@ -950,7 +967,10 @@ export function OnlineGame({
                   >
                     <span style={{ color: state.players[n.killerId].color }}>{describe(n.killerId, true)}</span>
                     {selfKill ? (
-                      ` ${n.verb} themselves`
+                      <>
+                        {` ${n.verb} `}
+                        <span style={{ color: state.players[n.killerId].color }}>{reflexive(n.killerId)}</span>
+                      </>
                     ) : (
                       <>
                         {` ${n.verb} `}

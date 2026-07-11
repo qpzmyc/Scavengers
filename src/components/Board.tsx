@@ -79,8 +79,8 @@ function buildSpawnTints(state: GameState): Map<string, string> {
   return tints;
 }
 
-function PickupMarker({ type, size }: { type: 'energyPickup' | 'ammoPickup'; size: number }) {
-  const color = type === 'energyPickup' ? theme.energy : theme.ammo;
+function PickupMarker({ type, size }: { type: 'energyPickup' | 'bonusEnergyPickup' | 'ammoPickup'; size: number }) {
+  const color = type === 'ammoPickup' ? theme.ammo : theme.energy;
   const d = Math.max(8, size * 0.34);
   return (
     <div
@@ -189,7 +189,7 @@ export function Board({
                 zIndex: kind ? 3 : 1,
               }}
             >
-              {visible && (tile.type === 'energyPickup' || tile.type === 'ammoPickup') && (
+              {visible && (tile.type === 'energyPickup' || tile.type === 'bonusEnergyPickup' || tile.type === 'ammoPickup') && (
                 <PickupMarker type={tile.type} size={cellPixelSize} />
               )}
             </div>

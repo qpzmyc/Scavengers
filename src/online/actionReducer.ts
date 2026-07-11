@@ -22,7 +22,7 @@ export type ApplyResult =
 // Validate + apply one player's action against the authoritative state, returning
 // the new state plus an ActionEvent (what happened). Mirrors App.tsx handleConfirm.
 export function applyAction(state: GameState, actorId: PlayerId, req: ActionRequest): ApplyResult {
-  if (state.winner !== null) return { ok: false, error: 'The game is over.' };
+  if (state.winner !== null || state.draw != null) return { ok: false, error: 'The game is over.' };
   if (state.currentTurn !== actorId) return { ok: false, error: 'Not your turn.' };
   const actor = state.players[actorId];
   if (!actor || actor.eliminated) return { ok: false, error: 'You are not in play.' };

@@ -83,7 +83,7 @@ function simulateEnergyAfterPath(board: GameState['board'], startEnergy: number,
   for (const p of path) {
     energy -= MOVE_ENERGY_COST_PER_TILE;
     const tile = board[p.y]?.[p.x];
-    if (tile && tile.type === 'energyPickup') {
+    if (tile && (tile.type === 'energyPickup' || tile.type === 'bonusEnergyPickup')) {
       energy = Math.min(MAX_ENERGY, energy + ENERGY_PICKUP_VALUE);
     }
   }
@@ -178,7 +178,7 @@ function App() {
     });
   };
 
-  const gameOver = state.winner !== null;
+  const gameOver = state.winner !== null || state.draw != null;
   const viewerId = state.currentTurn;
 
   // Win sequence: fade to black slowly, then reveal the win screen (mirrors OnlineGame).
@@ -561,7 +561,7 @@ function App() {
         for (const [verb, group] of victimsByVerb) {
           const victimNames = group.map((v) => acted.players[v.victimId].color.toUpperCase());
           const killMsg =
-            next.winner === null && verb !== 'crushed'
+            next.winner === null && next.draw == null && verb !== 'crushed'
               ? `${verb[0].toUpperCase()}${verb.slice(1)} ${victimNames.join(', ')} — +1 extra turn!`
               : `${verb[0].toUpperCase()}${verb.slice(1)} ${victimNames.join(', ')}!`;
           pushActionNotice(killMsg, 'kill');
@@ -574,7 +574,7 @@ function App() {
       setDisplay(next);
       setDeathAnims([]);
       setRedTints([]);
-      if (next.winner !== null) {
+      if (next.winner !== null || next.draw != null) {
         clearLocalSave(); // finished games aren't resumable
         setPhase('playing'); // game over screen
       } else if (turnPasses) {
@@ -1178,7 +1178,12 @@ function App() {
               }}
             >
               <h1 style={{ fontSize: 48, margin: 0, textAlign: 'center' }}>
-                {renderColoredText(state.players[state.winner!].color.toUpperCase(), colorSet)} Wins!
+                {state.draw
+                  ? renderColoredText(
+                      `${state.draw.map((id) => state.players[id].color.toUpperCase()).join(', ')} Win!`,
+                      colorSet
+                    )
+                  : <>{renderColoredText(state.players[state.winner!].color.toUpperCase(), colorSet)} Wins!</>}
               </h1>
               <div style={{ transform: 'scale(1.1)', transformOrigin: 'top center' }}>
                 {state.mode === 'lastStanding' ? <Lives state={state} /> : <Leaderboard state={state} />}
