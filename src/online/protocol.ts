@@ -43,7 +43,9 @@ export type ClientMsg =
   | { type: 'updateSettings'; mode: GameMode; deathCap: number; targetScore: number }
   | { type: 'makeHost'; playerId: PlayerId }
   | { type: 'kickPlayer'; playerId: PlayerId }
-  | { type: 'backToLobby'; roomCode: string };
+  | { type: 'backToLobby'; roomCode: string }
+  // Deliberate mid-game leave: remove me from the match right away (no reconnect grace).
+  | { type: 'leave' };
 
 export type ServerMsg =
   | { type: 'assigned'; playerId: PlayerId; token: string }
@@ -64,6 +66,9 @@ export type ServerMsg =
   | { type: 'state'; state: GameState; event: ActionEvent }
   | { type: 'paused'; disconnected: PlayerId }
   | { type: 'resumed'; state: GameState }
+  // A player was removed from the game (left, or a disconnect grace expired). Carries the
+  // post-removal state; clients snap to it and toast "<name> has left".
+  | { type: 'playerLeft'; playerId: PlayerId; state: GameState }
   | { type: 'over'; state: GameState }
   | { type: 'kicked' }
   | { type: 'error'; message: string };

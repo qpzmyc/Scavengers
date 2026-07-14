@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { createInitialGameState } from './state';
-import { resolveAttack, endTurn } from './turns';
+import { resolveAttack, endTurn, removePlayer } from './turns';
 import { punch } from './combat';
 
 function withPositions(state: ReturnType<typeof createInitialGameState>, p1: { x: number; y: number }, p2: { x: number; y: number }) {
@@ -82,6 +82,50 @@ describe('resolveAttack', () => {
     const next = resolveAttack(attackResult, 'p1');
     expect(next.winner).toBeNull();
     expect(next.players.p2.deaths).toBe(0);
+  });
+});
+
+describe('removePlayer', () => {
+  it('marks the player eliminated and clears their token/phantom from the board', () => {
+    let state = createInitialGameState('lastStanding', 4);
+    state = { ...state, players: { ...state.players, p3: { ...state.players.p3, isPhantom: true, phantomDisplayPosition: { x: 2, y: 2 } } } };
+    const next = removePlayer(state, 'p3');
+    expect(next.players.p3.eliminated).toBe(true);
+    expect(next.players.p3.alive).toBe(false);
+    expect(next.players.p3.isPhantom).toBe(false);
+    expect(next.players.p3.phantomDisplayPosition).toBeNull();
+  });
+
+  it('advances the turn when the removed player was the current player', () => {
+    const state = createInitialGameState('lastStanding', 4); // order p1,p3,p2,p4; current p1
+    const next = removePlayer(state, 'p1');
+    expect(next.currentTurn).toBe('p3');
+  });
+
+  it('leaves the current turn alone when a non-current player is removed', () => {
+    const state = createInitialGameState('lastStanding', 4);
+    const next = removePlayer(state, 'p2');
+    expect(next.currentTurn).toBe('p1');
+  });
+
+  it('ends the game with the sole survivor as winner (deathmatch, before any target score)', () => {
+    const state = createInitialGameState('deathmatch'); // 2 players
+    const next = removePlayer(state, 'p2');
+    expect(next.winner).toBe('p1');
+  });
+
+  it('drops a corner bonus queued for the removed player', () => {
+    let state = createInitialGameState('lastStanding', 4);
+    state = { ...state, pendingCornerPickups: ['p3', 'p2'] };
+    const next = removePlayer(state, 'p3');
+    expect(next.pendingCornerPickups).toEqual(['p2']);
+  });
+
+  it('is a no-op for an already-eliminated player', () => {
+    let state = createInitialGameState('lastStanding', 4);
+    state = removePlayer(state, 'p3');
+    const again = removePlayer(state, 'p3');
+    expect(again).toBe(state);
   });
 });
 

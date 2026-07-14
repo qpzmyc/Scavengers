@@ -8,9 +8,26 @@ interface LeaderboardProps {
   displayName?: (id: PlayerId) => string;
 }
 
-const th: React.CSSProperties = {
-  textAlign: 'right',
-  padding: '6px 10px',
+// Fixed row height so rows can be absolutely positioned and slide (transform) between
+// ranks when the sort order changes.
+const ROW_H = 42;
+
+const cell: React.CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'flex-end',
+  fontVariantNumeric: 'tabular-nums',
+  fontSize: 16,
+  fontWeight: 600,
+  color: theme.text,
+  padding: '0 10px',
+};
+
+const headCell: React.CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'flex-end',
+  padding: '0 10px 6px',
   color: theme.textMuted,
   fontWeight: 500,
   fontSize: 12,
@@ -18,18 +35,26 @@ const th: React.CSSProperties = {
   letterSpacing: 0.4,
 };
 
-const td: React.CSSProperties = {
-  textAlign: 'right',
-  padding: '8px 10px',
-  fontVariantNumeric: 'tabular-nums',
-  fontSize: 16,
-  fontWeight: 600,
-  color: theme.text,
-};
-
 export function Leaderboard({ state, displayName }: LeaderboardProps) {
-  const players = state.turnOrder.map((id) => state.players[id]);
   const showScore = state.mode === 'deathmatch';
+  const ids = state.turnOrder;
+  const metricCount = 3 + (showScore ? 1 : 0);
+  const gridTemplateColumns = `minmax(0,1fr) repeat(${metricCount}, minmax(52px, auto))`;
+
+  // Rank order, recomputed every render: active players first (removed/eliminated sink
+  // to the bottom), then by score descending in deathmatch, with turn order as a stable
+  // tie-break. Each player's row is drawn at its rank * ROW_H and CSS-transitions there,
+  // so score changes and a player leaving animate as smooth position swaps.
+  const ranked = [...ids].sort((a, b) => {
+    const pa = state.players[a];
+    const pb = state.players[b];
+    const ea = pa.eliminated ? 1 : 0;
+    const eb = pb.eliminated ? 1 : 0;
+    if (ea !== eb) return ea - eb;
+    if (showScore && pb.score !== pa.score) return pb.score - pa.score;
+    return ids.indexOf(a) - ids.indexOf(b);
+  });
+  const rankOf = new Map<PlayerId, number>(ranked.map((id, i) => [id, i]));
 
   return (
     <div
@@ -50,31 +75,55 @@ export function Leaderboard({ state, displayName }: LeaderboardProps) {
           </span>
         )}
       </div>
-      <table style={{ borderCollapse: 'collapse', width: '100%' }}>
-        <thead>
-          <tr>
-            <th style={{ ...th, textAlign: 'left' }}>Player</th>
-            <th style={th}>Kills (+5)</th>
-            <th style={th}>Deaths (-3)</th>
-            <th style={th}>Streak (+1)</th>
-            {showScore && <th style={th}>Score</th>}
-          </tr>
-        </thead>
-        <tbody>
-          {players.map((p) => (
-            <tr key={p.id} style={{ borderTop: `1px solid ${theme.border}` }}>
-              <td style={{ ...td, textAlign: 'left', display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span style={{ width: 12, height: 12, borderRadius: '50%', background: p.color, display: 'inline-block' }} />
-                {displayName ? displayName(p.id) : p.color.toUpperCase()}
-              </td>
-              <td style={td}>{p.kills}</td>
-              <td style={td}>{p.deaths}</td>
-              <td style={td}>{Math.max(p.longestStreak, p.currentStreak)}</td>
-              {showScore && <td style={td}>{p.score}</td>}
-            </tr>
-          ))}
-        </tbody>
-      </table>
+
+      <div style={{ display: 'grid', gridTemplateColumns }}>
+        <div style={{ ...headCell, justifyContent: 'flex-start' }}>Player</div>
+        <div style={headCell}>Kills (+5)</div>
+        <div style={headCell}>Deaths (-3)</div>
+        <div style={headCell}>Streak (+1)</div>
+        {showScore && <div style={headCell}>Score</div>}
+      </div>
+
+      {/* Positioned rows: each keyed by player id (so React keeps the DOM node) and
+          translated to its current rank, with a transition for animated re-ranking. */}
+      <div style={{ position: 'relative', height: ids.length * ROW_H }}>
+        {ids.map((id) => {
+          const p = state.players[id];
+          const rank = rankOf.get(id) ?? 0;
+          return (
+            <div
+              key={id}
+              style={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                right: 0,
+                height: ROW_H,
+                display: 'grid',
+                gridTemplateColumns,
+                alignItems: 'center',
+                borderTop: `1px solid ${theme.border}`,
+                boxSizing: 'border-box',
+                transform: `translateY(${rank * ROW_H}px)`,
+                transition: 'transform 0.45s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.35s ease',
+                opacity: p.eliminated ? 0.4 : 1,
+              }}
+            >
+              <div style={{ ...cell, justifyContent: 'flex-start', gap: 8, minWidth: 0 }}>
+                <span style={{ width: 12, height: 12, borderRadius: '50%', background: p.color, display: 'inline-block', flexShrink: 0 }} />
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {displayName ? displayName(p.id) : p.color.toUpperCase()}
+                </span>
+              </div>
+              <div style={cell}>{p.kills}</div>
+              <div style={cell}>{p.deaths}</div>
+              <div style={cell}>{Math.max(p.longestStreak, p.currentStreak)}</div>
+              {showScore && <div style={cell}>{p.score}</div>}
+            </div>
+          );
+        })}
+      </div>
+
       <div style={{ marginTop: 8, fontSize: 11, color: theme.textMuted }}>Streak = most consecutive turns alive</div>
     </div>
   );

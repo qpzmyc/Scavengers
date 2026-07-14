@@ -2,6 +2,7 @@ import {
   createInitialGameState,
   defaultDeathCapForCount,
   defaultTargetScoreForCount,
+  removePlayer,
   MIN_DEATH_CAP,
   MAX_DEATH_CAP,
   MIN_TARGET_SCORE,
@@ -49,7 +50,10 @@ export type RoomInput =
   | { t: 'makeHost'; connId: string; playerId: PlayerId }
   | { t: 'kickPlayer'; connId: string; playerId: PlayerId }
   | { t: 'backToLobby'; connId: string; roomCode: string }
-  | { t: 'disconnect'; connId: string };
+  | { t: 'disconnect'; connId: string }
+  // Remove a player mid-game and continue: `connId` for a deliberate leave, `playerId`
+  // when the server's reconnect-grace timer fires for a still-disconnected seat.
+  | { t: 'removePlayer'; connId?: string; playerId?: PlayerId };
 
 export interface Outbound {
   to: 'all' | { connId: string };
@@ -270,6 +274,32 @@ export function roomReduce(model: RoomModel, input: RoomInput): RoomStep {
         out.push({ to: 'all', msg: { type: 'paused', disconnected: slot.playerId } });
       }
       out.push({ to: 'all', msg: rosterMsg(next) });
+      return { model: next, out };
+    }
+
+    case 'removePlayer': {
+      // Only meaningful for an in-progress game (playing or paused for a grace window).
+      if ((model.phase !== 'playing' && model.phase !== 'paused') || !model.state) return { model, out: [] };
+      const slot = input.playerId
+        ? model.slots.find((s) => s.playerId === input.playerId)
+        : slotOf(model, input.connId ?? '');
+      if (!slot) return { model, out: [] };
+      const removedId = slot.playerId;
+      const state = removePlayer(model.state, removedId);
+      // Free the seat entirely — a removed player is out for the match and can't reclaim it.
+      const slots = model.slots.map((s) =>
+        s === slot ? { ...s, connId: null, connected: false, token: null } : s
+      );
+      const over = state.winner !== null || state.draw != null;
+      let next: RoomModel = { ...model, state, slots, phase: over ? 'over' : 'playing' };
+      if (model.hostConnId === slot.connId) {
+        next = { ...next, hostConnId: slots.find((s) => s.connected)?.connId ?? null };
+      }
+      const out: Outbound[] = [
+        { to: 'all', msg: { type: 'playerLeft', playerId: removedId, state } },
+        { to: 'all', msg: rosterMsg(next) },
+      ];
+      if (over) out.push({ to: 'all', msg: { type: 'over', state } });
       return { model: next, out };
     }
   }

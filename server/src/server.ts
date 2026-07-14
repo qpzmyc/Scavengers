@@ -3,6 +3,11 @@ import type { GameMode } from '../../src/engine';
 import type { ClientMsg, LobbyClientMsg, ServerMsg } from '../../src/online/protocol';
 import { roomInit, roomReduce, isAbandonedInLobby, type RoomInput, type RoomModel } from '../../src/online/roomReducer';
 import { lobbyInit, lobbyReduce, type LobbyModel } from '../../src/online/lobbyReducer';
+import type { PlayerId } from '../../src/engine';
+
+// How long a mid-game disconnect keeps a seat reserved (the game pauses) before the
+// player is removed and the match continues without them.
+const RECONNECT_GRACE_MS = 10_000;
 
 function parse<T>(raw: string | ArrayBuffer | ArrayBufferView): T | null {
   try {
@@ -17,6 +22,9 @@ function parse<T>(raw: string | ArrayBuffer | ArrayBufferView): T | null {
 export class ScavengersServer extends Server<Record<string, unknown>> {
   static options = { hibernate: false };
   model: RoomModel | null = null;
+  // Per-seat pending-removal timers: a mid-game disconnect starts one, and it fires
+  // (removing the player) unless they reconnect within RECONNECT_GRACE_MS.
+  removalTimers = new Map<PlayerId, ReturnType<typeof setTimeout>>();
 
   onConnect(conn: Connection, ctx: ConnectionContext) {
     if (!this.model) {
@@ -56,6 +64,7 @@ export class ScavengersServer extends Server<Record<string, unknown>> {
     else if (msg.type === 'makeHost') this.dispatch({ t: 'makeHost', connId: conn.id, playerId: msg.playerId });
     else if (msg.type === 'kickPlayer') this.dispatch({ t: 'kickPlayer', connId: conn.id, playerId: msg.playerId });
     else if (msg.type === 'backToLobby') this.dispatch({ t: 'backToLobby', connId: conn.id, roomCode: msg.roomCode });
+    else if (msg.type === 'leave') this.dispatch({ t: 'removePlayer', connId: conn.id });
   }
 
   onClose(conn: Connection) {
@@ -71,8 +80,37 @@ export class ScavengersServer extends Server<Record<string, unknown>> {
       if (o.to === 'all') this.broadcast(payload);
       else this.getConnection(o.to.connId)?.send(payload);
     }
+    this.syncRemovalTimers();
     if (input.t === 'disconnect' && isAbandonedInLobby(this.model)) {
       this.delistFromLobby();
+    }
+  }
+
+  // Reconcile the pending-removal timers against the current model: a seat that's
+  // disconnected mid-game (reserved, awaiting reconnect) gets a grace timer; once it
+  // reconnects or is removed/freed, its timer is cleared. Called after every dispatch.
+  private syncRemovalTimers() {
+    const m = this.model;
+    if (!m) {
+      for (const t of this.removalTimers.values()) clearTimeout(t);
+      this.removalTimers.clear();
+      return;
+    }
+    const active = m.phase === 'playing' || m.phase === 'paused';
+    for (const slot of m.slots) {
+      const hasTimer = this.removalTimers.has(slot.playerId);
+      // In its grace window: mid-game, disconnected, but seat still reserved (token kept).
+      const inGrace = active && !slot.connected && slot.token !== null;
+      if (inGrace && !hasTimer) {
+        const pid = slot.playerId;
+        this.removalTimers.set(pid, setTimeout(() => {
+          this.removalTimers.delete(pid);
+          this.dispatch({ t: 'removePlayer', playerId: pid });
+        }, RECONNECT_GRACE_MS));
+      } else if (!inGrace && hasTimer) {
+        clearTimeout(this.removalTimers.get(slot.playerId)!);
+        this.removalTimers.delete(slot.playerId);
+      }
     }
   }
 

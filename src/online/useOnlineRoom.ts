@@ -18,6 +18,9 @@ export interface OnlineRoom {
   myPlayerId: PlayerId | null;
   state: GameState | null;
   lastEvent: ActionEvent | null;
+  // Bumped each time a player is removed from the game (left / grace expired), so the
+  // consumer can fire a "<name> has left" toast. `seq` distinguishes repeat removals.
+  lastLeft: { playerId: PlayerId; seq: number } | null;
   error: string | null;
   kicked: boolean;
   send: (msg: ClientMsg) => void;
@@ -48,8 +51,10 @@ export function useOnlineRoom(
   const [lastEvent, setLastEvent] = useState<ActionEvent | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [kicked, setKicked] = useState(false);
+  const [lastLeft, setLastLeft] = useState<{ playerId: PlayerId; seq: number } | null>(null);
 
   const tokenRef = useRef<string | null>(null);
+  const leftSeqRef = useRef(0);
 
   const socket = usePartySocket({
     host: PARTY_HOST,
@@ -122,6 +127,14 @@ export function useOnlineRoom(
           setLastEvent(null);
           setPhase('playing');
           break;
+        case 'playerLeft':
+          setState(msg.state);
+          // No animation for a removal — snap to the post-removal state (null event,
+          // like a resume/gameStart re-snap).
+          setLastEvent(null);
+          setPhase(msg.state.winner !== null || msg.state.draw != null ? 'over' : 'playing');
+          setLastLeft({ playerId: msg.playerId, seq: ++leftSeqRef.current });
+          break;
         case 'over':
           setState(msg.state);
           setPhase('over');
@@ -158,6 +171,7 @@ export function useOnlineRoom(
     myPlayerId,
     state,
     lastEvent,
+    lastLeft,
     error,
     kicked,
     send,

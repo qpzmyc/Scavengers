@@ -149,6 +149,43 @@ describe('roomReduce', () => {
     expect(p2.token).toBe('tokB'); // seat token preserved across reconnect
   });
 
+  it('removePlayer (deliberate leave) removes the player, frees the seat, and keeps playing', () => {
+    let m = roomInit('deathmatch', 4);
+    for (const c of ['A', 'B', 'C', 'D']) m = roomReduce(m, { t: 'join', connId: c, issueToken: `tok${c}` }).model;
+    m = roomReduce(m, { t: 'startGame', connId: 'A' }).model;
+    const victim = m.slots.find((s) => s.connId === 'C')!.playerId;
+    const step = roomReduce(m, { t: 'removePlayer', connId: 'C' });
+    m = step.model;
+    expect(m.phase).toBe('playing');
+    expect(m.state!.players[victim].eliminated).toBe(true);
+    const seat = m.slots.find((s) => s.playerId === victim)!;
+    expect(seat.connId).toBeNull();
+    expect(seat.token).toBeNull(); // seat freed — no rejoin
+    expect(step.out.some((o) => o.to === 'all' && o.msg.type === 'playerLeft')).toBe(true);
+  });
+
+  it('removePlayer that leaves one player standing ends the game with them as winner', () => {
+    let m = seatedTwo();
+    m = roomReduce(m, { t: 'startGame', connId: 'A' }).model;
+    const survivor = m.slots.find((s) => s.connId === 'A')!.playerId;
+    const step = roomReduce(m, { t: 'removePlayer', connId: 'B' });
+    expect(step.model.phase).toBe('over');
+    expect(step.model.state!.winner).toBe(survivor);
+    expect(step.out.some((o) => o.to === 'all' && o.msg.type === 'over')).toBe(true);
+  });
+
+  it('removePlayer by playerId (grace-timer path) removes a still-disconnected seat after a pause', () => {
+    let m = roomInit('lastStanding', 4);
+    for (const c of ['A', 'B', 'C', 'D']) m = roomReduce(m, { t: 'join', connId: c, issueToken: `tok${c}` }).model;
+    m = roomReduce(m, { t: 'startGame', connId: 'A' }).model;
+    const victim = m.slots.find((s) => s.connId === 'B')!.playerId;
+    m = roomReduce(m, { t: 'disconnect', connId: 'B' }).model; // pauses, reserves the seat
+    expect(m.phase).toBe('paused');
+    const step = roomReduce(m, { t: 'removePlayer', playerId: victim });
+    expect(step.model.phase).toBe('playing'); // grace expired -> continue without them
+    expect(step.model.state!.players[victim].eliminated).toBe(true);
+  });
+
   it('a join WITHOUT the seat token cannot hijack a reserved seat during a pause', () => {
     let m = seatedTwo();
     m = roomReduce(m, { t: 'startGame', connId: 'A' }).model;

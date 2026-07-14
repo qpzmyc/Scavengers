@@ -51,6 +51,32 @@ export function resolveAttack(attackResult: AttackResult, attackerId: PlayerId):
   return state;
 }
 
+// Remove a player from an in-progress game (they left an online match). They act as if
+// eliminated: their token/phantom leave the board, they're skipped in the turn order,
+// and any corner bonus queued for them is dropped. If they were the current player the
+// turn advances to the next active one, and if only one player is now left, that player
+// wins (in either mode — see checkWinCondition). A no-op if they're already gone.
+export function removePlayer(state: GameState, playerId: PlayerId): GameState {
+  const player = state.players[playerId];
+  if (!player || player.eliminated) return state;
+  let next: GameState = {
+    ...state,
+    players: {
+      ...state.players,
+      [playerId]: { ...player, eliminated: true, alive: false, isPhantom: false, phantomDisplayPosition: null },
+    },
+    pendingCornerPickups: state.pendingCornerPickups.filter((id) => id !== playerId),
+  };
+  const winner = checkWinCondition(next);
+  if (winner) {
+    return { ...next, winner };
+  }
+  if (next.currentTurn === playerId) {
+    next = { ...next, currentTurn: nextNonEliminatedPlayerId(next, playerId) };
+  }
+  return next;
+}
+
 function nextNonEliminatedPlayerId(state: GameState, afterPlayerId: PlayerId): PlayerId {
   const order = state.turnOrder;
   const startIndex = order.indexOf(afterPlayerId);

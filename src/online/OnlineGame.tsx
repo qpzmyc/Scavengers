@@ -358,6 +358,16 @@ export function OnlineGame({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [room.error]);
 
+  // Toast when a player is removed from the game (they left, or a disconnect grace
+  // expired). The board snap is handled by the incoming-transition effect (null event).
+  useEffect(() => {
+    if (!room.lastLeft || !room.state) return;
+    const id = room.lastLeft.playerId;
+    if (id === room.myPlayerId) return; // I'm the one leaving — already headed out
+    pushActionNotice(<>{colorName(id, nameFor(id), room.state)} has left</>, 'warning');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [room.lastLeft?.seq]);
+
   const pausedOverlay =
     room.phase === 'paused' ? (
       <div
@@ -884,7 +894,13 @@ export function OnlineGame({
           title="Leave game?"
           message="Are you sure you want to leave this game?"
           confirmLabel="Leave game"
-          onConfirm={() => { setShowLeaveConfirm(false); onLeave(); }}
+          onConfirm={() => {
+            setShowLeaveConfirm(false);
+            // Tell the server to remove me right away (no reconnect grace) so the others
+            // see "<me> has left" and the game continues, then exit to the menu.
+            room.send({ type: 'leave' });
+            onLeave();
+          }}
           onCancel={() => setShowLeaveConfirm(false)}
         />
       )}
