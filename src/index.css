@@ -242,8 +242,18 @@ button:disabled {
 
 @media (max-width: 1199px) {
   .game-layout {
+    /* Rows 2 and 4 (standings, controls) are bounded content — at most 4
+       players, at most a handful of buttons — so they get `auto` and are
+       shown in full at their natural height. Making them `1fr` split the
+       flexible space three ways and starved the standings row, forcing a
+       4-player leaderboard into its own internal scrollbar. Row 3 (kills)
+       is unbounded (a growing feed), so it keeps `minmax(0, 1fr)`: it
+       absorbs the leftover space and scrolls internally via its own
+       `min-height: 0; overflow-y: auto` rather than forcing the grid to
+       clip (see the sibling lesson on side-panel rows below). Do not
+       change rows 2 or 4 back to `1fr` — that reintroduces the regression. */
     grid-template-columns: auto minmax(0, 1fr);
-    grid-template-rows: auto minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-rows: auto auto minmax(0, 1fr) auto;
     grid-template-areas:
       'title title'
       'stand center'
