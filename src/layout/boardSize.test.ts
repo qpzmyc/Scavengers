@@ -13,8 +13,8 @@ describe('boardCellSize', () => {
   });
 
   it('floors to a whole pixel so gridlines do not seam', () => {
-    // 665 / 11 = 60.45...
-    expect(boardCellSize(665, 900)).toBe(60);
+    // 667 / 11 = 60.636... (floors to 60, but rounds to 61)
+    expect(boardCellSize(667, 900)).toBe(60);
   });
 
   it('has no upper cap, so large displays get a bigger board', () => {
