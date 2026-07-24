@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { GRID_SIZE } from '../engine';
 import { boardCellSize, MIN_CELL_PX } from './boardSize';
 
 /**
@@ -23,9 +24,13 @@ export function useBoardColumn() {
     const observer = new ResizeObserver((entries) => {
       const box = entries[0]?.contentRect;
       if (!box) return;
+      const cellSize = boardCellSize(box.width, box.height);
+      // columnWidth tracks the board's rendered width (not the wrapper's width) so that
+      // ResourceBars and ControlPanel align flush with the board's left and right edges.
+      const boardWidth = GRID_SIZE * cellSize + 12;
       const next = {
-        cellSize: boardCellSize(box.width, box.height),
-        columnWidth: Math.max(320, Math.round(box.width)),
+        cellSize,
+        columnWidth: Math.max(boardWidth, 320),
       };
       // Bail out when nothing changed: ResizeObserver fires on sub-pixel jitter
       // and an unconditional setState would re-render the whole game every tick.
