@@ -12,6 +12,20 @@ interface LeaderboardProps {
 // ranks when the sort order changes.
 const ROW_H = 42;
 
+// The metric columns are a FIXED width, not `auto`. The header row and the player rows
+// are two separate grids (rows have to be their own grid so they can be absolutely
+// positioned for the rank animation above), and `auto` tracks are sized from each
+// grid's own content — the header measured its long labels while the rows measured a
+// single digit and collapsed to the minimum, so the numbers drifted right of their
+// headers. A fixed width can't resolve differently between the two.
+const METRIC_COL_W = 68;
+
+// The player-name column needs an explicit floor: the rows are absolutely positioned
+// (for the rank animation), so they contribute nothing to the card's intrinsic width —
+// only the header row does. Without a min the column collapses to the width of the
+// word "Player" and every name ellipsises.
+const NAME_COL_MIN = 140;
+
 const cell: React.CSSProperties = {
   display: 'flex',
   alignItems: 'center',
@@ -23,23 +37,36 @@ const cell: React.CSSProperties = {
   padding: '0 10px',
 };
 
+// Two-line header: label on top, scoring delta beneath. Bottom-aligned so the
+// delta-less "Score" column sits level with the others' lower line.
 const headCell: React.CSSProperties = {
   display: 'flex',
-  alignItems: 'center',
+  flexDirection: 'column',
+  alignItems: 'flex-end',
   justifyContent: 'flex-end',
   padding: '0 10px 6px',
   color: theme.textMuted,
   fontWeight: 500,
   fontSize: 12,
+  lineHeight: 1.25,
   textTransform: 'uppercase',
   letterSpacing: 0.4,
 };
+
+function HeadCell({ label, delta }: { label: string; delta?: string }) {
+  return (
+    <div style={headCell}>
+      <span>{label}</span>
+      {delta && <span style={{ fontSize: 10, fontWeight: 400, letterSpacing: 0 }}>{delta}</span>}
+    </div>
+  );
+}
 
 export function Leaderboard({ state, displayName }: LeaderboardProps) {
   const showScore = state.mode === 'deathmatch';
   const ids = state.turnOrder;
   const metricCount = 3 + (showScore ? 1 : 0);
-  const gridTemplateColumns = `minmax(0,1fr) repeat(${metricCount}, minmax(52px, auto))`;
+  const gridTemplateColumns = `minmax(${NAME_COL_MIN}px,1fr) repeat(${metricCount}, ${METRIC_COL_W}px)`;
 
   // Rank order, recomputed every render: active players first (removed/eliminated sink
   // to the bottom), then by score descending in deathmatch, with turn order as a stable
@@ -77,11 +104,11 @@ export function Leaderboard({ state, displayName }: LeaderboardProps) {
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns }}>
-        <div style={{ ...headCell, justifyContent: 'flex-start' }}>Player</div>
-        <div style={headCell}>Kills (+5)</div>
-        <div style={headCell}>Deaths (-3)</div>
-        <div style={headCell}>Streak (+1)</div>
-        {showScore && <div style={headCell}>Score</div>}
+        <div style={{ ...headCell, alignItems: 'flex-start' }}>Player</div>
+        <HeadCell label="Kills" delta="+5" />
+        <HeadCell label="Deaths" delta="-3" />
+        <HeadCell label="Streak" delta="+1" />
+        {showScore && <HeadCell label="Score" />}
       </div>
 
       {/* Positioned rows: each keyed by player id (so React keeps the DOM node) and
