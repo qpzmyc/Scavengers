@@ -280,9 +280,20 @@ Expected: no output. If anything is returned, stop — the file is live and the 
 }
 
 .game-layout__title { grid-area: title; }
+.game-layout__strip { display: none; }
+
+/* The side columns scroll internally rather than being clipped by the grid's
+   `overflow: hidden`. A 4-player standings card on a short viewport (1024x768
+   with the kills panel beneath it) would otherwise lose its bottom rows with
+   no way to reach them. */
+.game-layout__standings,
+.game-layout__kills {
+  min-height: 0;
+  overflow-y: auto;
+}
+
 .game-layout__standings { grid-area: stand; }
 .game-layout__kills { grid-area: kills; }
-.game-layout__strip { display: none; }
 
 .game-layout__center {
   grid-area: center;
@@ -333,6 +344,7 @@ Expected: no output. If anything is returned, stop — the file is live and the 
   .game-layout__standings,
   .game-layout__kills {
     display: none;
+    overflow-y: visible;
   }
 
   .game-layout__strip {
