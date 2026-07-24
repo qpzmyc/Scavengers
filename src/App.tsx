@@ -41,6 +41,8 @@ import { ConfirmDialog } from './components/ConfirmDialog';
 import { loadLocalSave, saveLocalGame, clearLocalSave } from './game/localSave';
 import type { KillNotification } from './game/localSave';
 import { theme } from './theme';
+import { useBoardColumn } from './layout/useBoardColumn';
+import { GameLayout } from './components/GameLayout';
 import {
   type AnimFrame,
   RESULT_MS,
@@ -90,18 +92,6 @@ function simulateEnergyAfterPath(board: GameState['board'], startEnergy: number,
   return energy;
 }
 
-function useCellSize(): number {
-  const compute = () =>
-    Math.max(28, Math.min(68, Math.floor(Math.min(window.innerWidth - 620, window.innerHeight - 140) / GRID_SIZE)));
-  const [size, setSize] = useState(compute);
-  useEffect(() => {
-    const onResize = () => setSize(compute());
-    window.addEventListener('resize', onResize);
-    return () => window.removeEventListener('resize', onResize);
-  }, []);
-  return size;
-}
-
 type Route =
   | { kind: 'menu'; initialGameType?: 'online' | 'inPerson' | 'bots'; initialScreen?: 'gameType' | 'settings' | 'join' }
   | { kind: 'game' }
@@ -119,7 +109,7 @@ function App() {
   // naming every replayed player at once.
   const [replayActorId, setReplayActorId] = useState<PlayerId | null>(null);
   const [showMenuConfirm, setShowMenuConfirm] = useState(false);
-  const cellSize = useCellSize();
+  const { ref: boardRef, cellSize, columnWidth } = useBoardColumn();
 
   // Persistent, stacked kill notifications shown top-right of the screen. Never
   // auto-dismissed — new kills are appended underneath older ones.
@@ -1003,9 +993,6 @@ function App() {
     borderRadius: theme.radius,
     boxShadow: theme.shadow,
   };
-  const boardWidth = GRID_SIZE * cellSize + 12;
-  const columnWidth = Math.max(boardWidth, 320);
-
   // Ephemeral sliding toast stack — fixed to the top of the viewport so it renders
   // consistently across every phase/screen. Newest notice is prepended, so it
   // appears at the top and pushes earlier ones down, like a real notification feed.
@@ -1144,7 +1131,7 @@ function App() {
   const barsPlayer = state.players[state.currentTurn];
 
   return (
-    <div style={{ minHeight: '100vh', padding: 24, boxSizing: 'border-box' }}>
+    <div>
       {menuChrome}
       {noticeStack}
       {gameOver && (
@@ -1208,18 +1195,20 @@ function App() {
           )}
         </div>
       )}
-      <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, marginBottom: 20, flexWrap: 'wrap' }}>
-        <h1 style={{ fontSize: 26 }}>Scavengers</h1>
-        <span style={{ color: theme.textMuted, fontSize: 13 }}>
-          {mode === 'lastStanding' ? 'Survival' : 'Deathmatch'}
-        </span>
-      </div>
-
-      <div style={{ display: 'flex', gap: 24, alignItems: 'flex-start', justifyContent: 'center', flexWrap: 'wrap' }}>
-        {state.mode === 'lastStanding' ? <Lives state={state} /> : <Leaderboard state={state} />}
-
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}>
-          {phase === 'replaying' ? (
+      <GameLayout
+        boardRef={boardRef}
+        title={
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, flexWrap: 'wrap' }}>
+            <h1 style={{ fontSize: 26 }}>Scavengers</h1>
+            <span style={{ color: theme.textMuted, fontSize: 13 }}>
+              {mode === 'lastStanding' ? 'Survival' : 'Deathmatch'}
+            </span>
+          </div>
+        }
+        standings={state.mode === 'lastStanding' ? <Lives state={state} /> : <Leaderboard state={state} />}
+        scoreStrip={null}
+        bars={
+          phase === 'replaying' ? (
             <div style={{ width: columnWidth, boxSizing: 'border-box', padding: '12px 16px', borderRadius: theme.radius, background: theme.surface, border: `1px solid ${theme.border}`, color: theme.textMuted, textAlign: 'center' }}>
               {(() => {
                 if (!replayActorId) return 'Replaying…';
@@ -1229,28 +1218,28 @@ function App() {
             </div>
           ) : (
             <ResourceBars player={barsPlayer} width={columnWidth} preview={preview} />
-          )}
-
-          <div style={{ position: 'relative' }}>
-            <Board
-              state={boardState}
-              viewerId={viewerId}
-              cellPixelSize={cellSize}
-              highlights={interactive ? dedupedHighlights : []}
-              onTileClick={interactive ? handleTileClick : undefined}
-              redTints={redTints}
-              deathAnims={deathAnims}
-              previewTints={interactive ? previewHitTiles : []}
-              attackPreparing={
-                interactive &&
-                (flow.kind === 'attackReposition' || flow.kind === 'attackSelect' || flow.kind === 'attackTarget')
-              }
-              // Keep the fog on the real position while previewing an unconfirmed move,
-              // so a player can't "scout" by hovering a move they won't commit.
-              visionCenter={interactive ? me.position : undefined}
-            />
-          </div>
-
+          )
+        }
+        board={
+          <Board
+            state={boardState}
+            viewerId={viewerId}
+            cellPixelSize={cellSize}
+            highlights={interactive ? dedupedHighlights : []}
+            onTileClick={interactive ? handleTileClick : undefined}
+            redTints={redTints}
+            deathAnims={deathAnims}
+            previewTints={interactive ? previewHitTiles : []}
+            attackPreparing={
+              interactive &&
+              (flow.kind === 'attackReposition' || flow.kind === 'attackSelect' || flow.kind === 'attackTarget')
+            }
+            // Keep the fog on the real position while previewing an unconfirmed move,
+            // so a player can't "scout" by hovering a move they won't commit.
+            visionCenter={interactive ? me.position : undefined}
+          />
+        }
+        controls={
           <div style={{ ...card, width: columnWidth, boxSizing: 'border-box' }}>
             {phase === 'result' ? (
               <div style={{ padding: 16, color: theme.textMuted, fontStyle: 'italic' }}>Resolving…</div>
@@ -1273,43 +1262,26 @@ function App() {
               />
             )}
           </div>
-        </div>
-
-        <div
-          style={{
-            background: theme.surface,
-            border: `1px solid ${theme.border}`,
-            borderRadius: theme.radius,
-            boxShadow: theme.shadow,
-            padding: 16,
-            minWidth: 240,
-            boxSizing: 'border-box',
-          }}
-        >
-          <h3 style={{ marginBottom: 10, fontSize: 15 }}>Kills</h3>
-          {notifications.length === 0 ? (
-            <div style={{ color: theme.textMuted, fontSize: 13, fontStyle: 'italic' }}>No kills yet</div>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {notifications.map((n) => (
-                <div
-                  key={n.id}
-                  style={{
-                    fontSize: 14,
-                    fontWeight: 600,
-                    color: theme.heading,
-                    animation: 'notificationIn 0.25s ease',
-                  }}
-                >
-                  <span style={{ color: n.killerColor }}>{n.killerName.toUpperCase()}</span>
-                  {` ${n.verb} `}
-                  <span style={{ color: n.victimColor }}>{n.victimName.toUpperCase()}</span>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
+        }
+        killsFeed={
+          <div style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: theme.radius, boxShadow: theme.shadow, padding: 16, minWidth: 240, boxSizing: 'border-box' }}>
+            <h3 style={{ marginBottom: 10, fontSize: 15 }}>Kills</h3>
+            {notifications.length === 0 ? (
+              <div style={{ color: theme.textMuted, fontSize: 13, fontStyle: 'italic' }}>No kills yet</div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {notifications.map((n) => (
+                  <div key={n.id} style={{ fontSize: 14, fontWeight: 600, color: theme.heading, animation: 'notificationIn 0.25s ease' }}>
+                    <span style={{ color: n.killerColor }}>{n.killerName.toUpperCase()}</span>
+                    {` ${n.verb} `}
+                    <span style={{ color: n.victimColor }}>{n.victimName.toUpperCase()}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        }
+      />
     </div>
   );
 }
