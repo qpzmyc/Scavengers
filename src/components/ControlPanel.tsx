@@ -109,8 +109,13 @@ const baseBtn: React.CSSProperties = {
 // proportionally to that width.
 const DEFAULT_ROW_WIDTH = 320;
 
-function row(): React.CSSProperties {
-  return { display: 'flex', gap: 8, marginTop: 6 };
+// Below this panel width, a row of buttons no longer has room to sit side by
+// side — four buttons at ~320px would get ~57px each and "Fake Move" wraps.
+// Stack them vertically instead so each button gets the full panel width.
+const STACK_BELOW_PX = 380;
+
+function row(stacked: boolean): React.CSSProperties {
+  return { display: 'flex', flexDirection: stacked ? 'column' : 'row', gap: 8, marginTop: 6 };
 }
 
 function sizedBtn(variant: Variant, disabled: boolean, active: boolean, width: number): React.CSSProperties {
@@ -162,6 +167,8 @@ export function ControlPanel({
   width = DEFAULT_ROW_WIDTH,
   maxMoveTiles,
 }: ControlPanelProps) {
+  const stacked = width < STACK_BELOW_PX;
+
   if (gameOver) {
     return <div style={{ ...wrap, fontStyle: 'italic', color: theme.textMuted }}>Game over — start a new game above.</div>;
   }
@@ -171,7 +178,7 @@ export function ControlPanel({
     return (
       <div style={wrap} data-testid="control-panel">
         <div style={title}>Choose an action</div>
-        <div style={row()}>
+        <div style={row(stacked)}>
           {/* Never HTML-disabled: clicking while unaffordable is handled by the
               caller, which shows a "not enough X" toast instead of doing nothing. */}
           <button style={{ ...sizedBtn('secondary', !can.move, false, width), ...costCol }} onClick={() => onSelectAction('move')}><span>Move</span><CostBadge items={COST.move} /></button>
@@ -189,7 +196,7 @@ export function ControlPanel({
       <div style={wrap} data-testid="control-panel">
         <div style={title}>Move</div>
         <div style={hint}>Click an adjacent square to move (up to {maxMoveTiles} times per turn). Click your character to undo.</div>
-        <div style={row()}>
+        <div style={row(stacked)}>
           <button style={sizedBtn('secondary', false, false, width)} onClick={onCancel}>Cancel</button>
           <button style={sizedBtn('primary', !confirmEnabled, false, width)} disabled={!confirmEnabled} onClick={onConfirm}>Confirm</button>
         </div>
@@ -202,7 +209,7 @@ export function ControlPanel({
       <div style={wrap} data-testid="control-panel">
         <div style={title}>Rest</div>
         <div style={hint}>Gain +{REST_ENERGY_GAIN} energy. You forfeit moving or attacking this turn.</div>
-        <div style={row()}>
+        <div style={row(stacked)}>
           <button style={sizedBtn('secondary', false, false, width)} onClick={onCancel}>Cancel</button>
           <button style={sizedBtn('primary', false, false, width)} onClick={onConfirm}>Confirm</button>
         </div>
@@ -215,7 +222,7 @@ export function ControlPanel({
       <div style={wrap} data-testid="control-panel">
         <div style={title}>Fake Move</div>
         <div style={hint}>Click an adjacent square to project or move your phantom (you stay put). Other players can only see your phantom, but you will be crushed if another player steps onto you.</div>
-        <div style={row()}>
+        <div style={row(stacked)}>
           <button style={sizedBtn('secondary', false, false, width)} onClick={onCancel}>Cancel</button>
           <button style={sizedBtn('primary', !confirmEnabled, false, width)} disabled={!confirmEnabled} onClick={onConfirm}>Confirm</button>
         </div>
@@ -230,7 +237,7 @@ export function ControlPanel({
         <div style={hint}>
           Click an adjacent square to reposition before attacking (-1 energy), or click skip.
         </div>
-        <div style={row()}>
+        <div style={row(stacked)}>
           <button style={sizedBtn('secondary', false, false, width)} onClick={onBack}>Back</button>
           <button style={sizedBtn('primary', false, false, width)} onClick={onNext}>{flow.path.length ? 'Next' : 'Skip'}</button>
         </div>
@@ -242,14 +249,14 @@ export function ControlPanel({
     return (
       <div style={wrap} data-testid="control-panel">
         <div style={title}>Attack — choose a weapon</div>
-        <div style={row()}>
+        <div style={row(stacked)}>
           {/* Always the same (non-greyed) style, regardless of affordability — the
               toast notification is the feedback mechanism now, not a dimmed button. */}
           <button style={{ ...sizedBtn('toggle', false, flow.type === 'punch', width), ...costCol }} onClick={() => onSelectAttackType('punch')}><span>Fist</span><CostBadge items={COST.punch} /></button>
           <button style={{ ...sizedBtn('toggle', false, flow.type === 'shoot', width), ...costCol }} onClick={() => onSelectAttackType('shoot')}><span>Gun</span><CostBadge items={COST.shoot} /></button>
           <button style={{ ...sizedBtn('toggle', false, flow.type === 'bomb', width), ...costCol }} onClick={() => onSelectAttackType('bomb')}><span>Bomb</span><CostBadge items={COST.bomb} /></button>
         </div>
-        <div style={row()}>
+        <div style={row(stacked)}>
           <button style={sizedBtn('secondary', false, false, width)} onClick={onBack}>Back</button>
           <button style={sizedBtn('primary', flow.type === null, false, width)} disabled={flow.type === null} onClick={onNext}>Next</button>
         </div>
@@ -262,7 +269,7 @@ export function ControlPanel({
     <div style={wrap} data-testid="control-panel">
       <div style={{ ...title, textTransform: 'capitalize' }}>{flow.kind === 'attackTarget' ? flow.type : ''}</div>
       <div style={hint}>{flow.kind === 'attackTarget' ? ATTACK_TARGET_HINT[flow.type] : ''}</div>
-      <div style={row()}>
+      <div style={row(stacked)}>
         <button style={sizedBtn('secondary', false, false, width)} onClick={onBack}>Back</button>
         <button style={sizedBtn('primary', !confirmEnabled, false, width)} disabled={!confirmEnabled} onClick={onConfirm}>Confirm</button>
       </div>

@@ -13,6 +13,8 @@ interface GameLayoutProps {
   boardRef: Ref<HTMLDivElement>;
   /** ControlPanel, or its "Resolving…" / replay placeholder. */
   controls: ReactNode;
+  /** Attach the ref from useElementWidth — this wrapper is the measured element. */
+  controlsRef: Ref<HTMLDivElement>;
   /** Kills notification panel. Hidden under the phone breakpoint. */
   killsFeed: ReactNode;
 }
@@ -25,6 +27,7 @@ export function GameLayout({
   board,
   boardRef,
   controls,
+  controlsRef,
   killsFeed,
 }: GameLayoutProps) {
   return (
@@ -37,6 +40,8 @@ export function GameLayout({
         <div className="game-layout__board" ref={boardRef}>
           {board}
         </div>
+      </div>
+      <div className="game-layout__controls" ref={controlsRef}>
         {controls}
       </div>
       <div className="game-layout__kills">{killsFeed}</div>

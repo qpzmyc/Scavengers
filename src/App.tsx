@@ -42,6 +42,7 @@ import { loadLocalSave, saveLocalGame, clearLocalSave } from './game/localSave';
 import type { KillNotification } from './game/localSave';
 import { theme } from './theme';
 import { useBoardColumn } from './layout/useBoardColumn';
+import { useElementWidth } from './layout/useElementWidth';
 import { GameLayout } from './components/GameLayout';
 import {
   type AnimFrame,
@@ -110,6 +111,10 @@ function App() {
   const [replayActorId, setReplayActorId] = useState<PlayerId | null>(null);
   const [showMenuConfirm, setShowMenuConfirm] = useState(false);
   const { ref: boardRef, cellSize, columnWidth } = useBoardColumn();
+  // The controls column lives in its own grid track now (see GameLayout), so it
+  // needs its own width measurement — columnWidth above tracks the board, which
+  // ResourceBars still aligns to, but is no longer the controls panel's width.
+  const { ref: controlsRef, width: controlsWidth } = useElementWidth();
 
   // Persistent, stacked kill notifications shown top-right of the screen. Never
   // auto-dismissed — new kills are appended underneath older ones.
@@ -1197,6 +1202,7 @@ function App() {
       )}
       <GameLayout
         boardRef={boardRef}
+        controlsRef={controlsRef}
         title={
           <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, flexWrap: 'wrap' }}>
             <h1 style={{ fontSize: 26 }}>Scavengers</h1>
@@ -1240,7 +1246,7 @@ function App() {
           />
         }
         controls={
-          <div style={{ ...card, width: columnWidth, boxSizing: 'border-box' }}>
+          <div style={{ ...card, width: controlsWidth, boxSizing: 'border-box' }}>
             {phase === 'result' ? (
               <div style={{ padding: 16, color: theme.textMuted, fontStyle: 'italic' }}>Resolving…</div>
             ) : phase === 'replaying' ? (
@@ -1257,7 +1263,7 @@ function App() {
                 onConfirm={handleConfirm}
                 onBack={handleBack}
                 onCancel={handleCancel}
-                width={columnWidth}
+                width={controlsWidth}
                 maxMoveTiles={maxMoveTiles}
               />
             )}

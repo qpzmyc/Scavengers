@@ -182,32 +182,43 @@ button:disabled {
   padding: 24px;
   height: 100dvh;
   overflow: hidden;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  grid-template-rows: auto minmax(0, 1fr);
+  /* The controls column is a fixed 320px, not `auto` or a fraction. ControlPanel
+     derives its own font size and padding from the width it is handed (see
+     sizedBtn in ControlPanel.tsx), so an `auto` column would size itself to
+     content that is itself sized from the column — the same kind of
+     self-referential feedback loop the board wrapper's comment below warns
+     about, just running through the grid track instead of flexbox. */
+  grid-template-columns: auto minmax(0, 1fr) 320px;
+  grid-template-rows: auto minmax(0, 1fr) minmax(0, 1fr);
   grid-template-areas:
     'title title  title'
-    'stand center kills';
+    'stand center controls'
+    'kills center controls';
 }
 
 .game-layout__title { grid-area: title; }
 .game-layout__strip { display: none; }
 
-/* The side columns scroll internally rather than being clipped by the grid's
-   `overflow: hidden`. `min-height: 0` on the items is necessary but not sufficient
-   if the grid tracks are `auto`: an `auto` track still grows to fit content, so
-   `min-height: 0` only zeroes the item's automatic minimum and does not prevent
-   the track from expanding. In the tablet breakpoint, side rows must be
-   `minmax(0, 1fr)` to constrain the track and force scrolling. A 4-player standings
-   card on a short viewport (1024x768 with kills beneath) would otherwise be
-   clipped with no way to reach its bottom rows. */
+/* The side columns (and the controls column) scroll internally rather than being
+   clipped by the grid's `overflow: hidden`. `min-height: 0` on the items is
+   necessary but not sufficient if the grid tracks are `auto`: an `auto` track
+   still grows to fit content, so `min-height: 0` only zeroes the item's automatic
+   minimum and does not prevent the track from expanding. Row tracks for these
+   columns must stay `minmax(0, 1fr)` in every breakpoint that gives this grid a
+   fixed height — never `auto`. A 4-player standings card on a short viewport
+   (1024x768 with kills beneath) would otherwise be clipped with no way to reach
+   its bottom rows; a tall control flow would be clipped the same way. This exact
+   bug was found and fixed in Task 3 — do not reintroduce it. */
 .game-layout__standings,
-.game-layout__kills {
+.game-layout__kills,
+.game-layout__controls {
   min-height: 0;
   overflow-y: auto;
 }
 
 .game-layout__standings { grid-area: stand; }
 .game-layout__kills { grid-area: kills; }
+.game-layout__controls { grid-area: controls; }
 
 .game-layout__center {
   grid-area: center;
@@ -232,11 +243,12 @@ button:disabled {
 @media (max-width: 1199px) {
   .game-layout {
     grid-template-columns: auto minmax(0, 1fr);
-    grid-template-rows: auto minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr);
     grid-template-areas:
       'title title'
       'stand center'
-      'kills center';
+      'kills center'
+      '.     controls';
   }
 }
 
@@ -248,11 +260,12 @@ button:disabled {
     gap: 16px;
     padding: 16px;
     grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: auto auto auto;
+    grid-template-rows: auto auto auto auto;
     grid-template-areas:
       'title'
       'strip'
-      'center';
+      'center'
+      'controls';
   }
 
   .game-layout__standings,
