@@ -44,6 +44,8 @@ import { theme } from './theme';
 import { useBoardColumn } from './layout/useBoardColumn';
 import { useElementWidth } from './layout/useElementWidth';
 import { GameLayout } from './components/GameLayout';
+import { ScoreStrip } from './components/ScoreStrip';
+import { Modal } from './components/Modal';
 import {
   type AnimFrame,
   RESULT_MS,
@@ -110,6 +112,8 @@ function App() {
   // naming every replayed player at once.
   const [replayActorId, setReplayActorId] = useState<PlayerId | null>(null);
   const [showMenuConfirm, setShowMenuConfirm] = useState(false);
+  // Phone breakpoint only: which side panel (normally shown inline) is open as a modal.
+  const [phonePanel, setPhonePanel] = useState<'standings' | 'kills' | null>(null);
   const { ref: boardRef, cellSize, columnWidth } = useBoardColumn();
   // The controls column lives in its own grid track now (see GameLayout), so it
   // needs its own width measurement — columnWidth above tracks the board, which
@@ -1135,6 +1139,21 @@ function App() {
 
   const barsPlayer = state.players[state.currentTurn];
 
+  const killsList =
+    notifications.length === 0 ? (
+      <div style={{ color: theme.textMuted, fontSize: 13, fontStyle: 'italic' }}>No kills yet</div>
+    ) : (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {notifications.map((n) => (
+          <div key={n.id} style={{ fontSize: 14, fontWeight: 600, color: theme.heading, animation: 'notificationIn 0.25s ease' }}>
+            <span style={{ color: n.killerColor }}>{n.killerName.toUpperCase()}</span>
+            {` ${n.verb} `}
+            <span style={{ color: n.victimColor }}>{n.victimName.toUpperCase()}</span>
+          </div>
+        ))}
+      </div>
+    );
+
   return (
     <div>
       {menuChrome}
@@ -1212,7 +1231,14 @@ function App() {
           </div>
         }
         standings={state.mode === 'lastStanding' ? <Lives state={state} /> : <Leaderboard state={state} />}
-        scoreStrip={null}
+        scoreStrip={
+          <ScoreStrip
+            state={state}
+            onOpenStandings={() => setPhonePanel('standings')}
+            onOpenKills={() => setPhonePanel('kills')}
+            killCount={notifications.length}
+          />
+        }
         bars={
           phase === 'replaying' ? (
             <div style={{ width: columnWidth, boxSizing: 'border-box', padding: '12px 16px', borderRadius: theme.radius, background: theme.surface, border: `1px solid ${theme.border}`, color: theme.textMuted, textAlign: 'center' }}>
@@ -1272,22 +1298,18 @@ function App() {
         killsFeed={
           <div style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: theme.radius, boxShadow: theme.shadow, padding: 16, minWidth: 240, boxSizing: 'border-box' }}>
             <h3 style={{ marginBottom: 10, fontSize: 15 }}>Kills</h3>
-            {notifications.length === 0 ? (
-              <div style={{ color: theme.textMuted, fontSize: 13, fontStyle: 'italic' }}>No kills yet</div>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                {notifications.map((n) => (
-                  <div key={n.id} style={{ fontSize: 14, fontWeight: 600, color: theme.heading, animation: 'notificationIn 0.25s ease' }}>
-                    <span style={{ color: n.killerColor }}>{n.killerName.toUpperCase()}</span>
-                    {` ${n.verb} `}
-                    <span style={{ color: n.victimColor }}>{n.victimName.toUpperCase()}</span>
-                  </div>
-                ))}
-              </div>
-            )}
+            {killsList}
           </div>
         }
       />
+      {phonePanel === 'standings' && (
+        <Modal title="Standings" onClose={() => setPhonePanel(null)}>
+          {state.mode === 'lastStanding' ? <Lives state={state} /> : <Leaderboard state={state} />}
+        </Modal>
+      )}
+      {phonePanel === 'kills' && (
+        <Modal title="Kills" onClose={() => setPhonePanel(null)}>{killsList}</Modal>
+      )}
     </div>
   );
 }
