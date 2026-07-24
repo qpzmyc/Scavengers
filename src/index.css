@@ -193,9 +193,13 @@ button:disabled {
 .game-layout__strip { display: none; }
 
 /* The side columns scroll internally rather than being clipped by the grid's
-   `overflow: hidden`. A 4-player standings card on a short viewport (1024x768
-   with the kills panel beneath it) would otherwise lose its bottom rows with
-   no way to reach them. */
+   `overflow: hidden`. `min-height: 0` on the items is necessary but not sufficient
+   if the grid tracks are `auto`: an `auto` track still grows to fit content, so
+   `min-height: 0` only zeroes the item's automatic minimum and does not prevent
+   the track from expanding. In the tablet breakpoint, side rows must be
+   `minmax(0, 1fr)` to constrain the track and force scrolling. A 4-player standings
+   card on a short viewport (1024x768 with kills beneath) would otherwise be
+   clipped with no way to reach its bottom rows. */
 .game-layout__standings,
 .game-layout__kills {
   min-height: 0;
@@ -228,7 +232,7 @@ button:disabled {
 @media (max-width: 1199px) {
   .game-layout {
     grid-template-columns: auto minmax(0, 1fr);
-    grid-template-rows: auto auto minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr) minmax(0, 1fr);
     grid-template-areas:
       'title title'
       'stand center'
