@@ -27,6 +27,11 @@ import { ResourceBars, type ResourcePreview } from '../components/ResourceBars';
 import { Leaderboard } from '../components/Leaderboard';
 import { Lives } from '../components/Lives';
 import { ControlPanel, type Flow, type AttackType, type Capabilities } from '../components/ControlPanel';
+import { GameLayout } from '../components/GameLayout';
+import { ScoreStrip } from '../components/ScoreStrip';
+import { Modal } from '../components/Modal';
+import { useBoardColumn } from '../layout/useBoardColumn';
+import { useElementWidth } from '../layout/useElementWidth';
 import { theme } from '../theme';
 import {
   type AnimFrame,
@@ -70,18 +75,6 @@ function simulateEnergyAfterPath(board: GameState['board'], startEnergy: number,
   return energy;
 }
 
-function useCellSize(): number {
-  const compute = () =>
-    Math.max(28, Math.min(68, Math.floor(Math.min(window.innerWidth - 620, window.innerHeight - 140) / GRID_SIZE)));
-  const [size, setSize] = useState(compute);
-  useEffect(() => {
-    const onResize = () => setSize(compute());
-    window.addEventListener('resize', onResize);
-    return () => window.removeEventListener('resize', onResize);
-  }, []);
-  return size;
-}
-
 export function OnlineGame({
   room,
   onLeave,
@@ -104,7 +97,13 @@ export function OnlineGame({
   const [animating, setAnimating] = useState(false);
   const [sending, setSending] = useState(false);
   const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
-  const cellSize = useCellSize();
+  // Phone breakpoint only: which side panel (normally shown inline) is open as a modal.
+  const [phonePanel, setPhonePanel] = useState<'standings' | 'kills' | null>(null);
+  const { ref: boardRef, cellSize, columnWidth } = useBoardColumn();
+  // The controls column lives in its own grid track (see GameLayout), so it needs its
+  // own width measurement — columnWidth above tracks the board, which ResourceBars
+  // still aligns to, but is no longer the controls panel's width.
+  const { ref: controlsRef, width: controlsWidth } = useElementWidth();
 
   const [notifications, setNotifications] = useState<
     { id: number; killerId: PlayerId; victimId: PlayerId; verb: string }[]
@@ -684,8 +683,40 @@ export function OnlineGame({
     borderRadius: theme.radius,
     boxShadow: theme.shadow,
   };
-  const boardWidth = GRID_SIZE * cellSize + 12;
-  const columnWidth = Math.max(boardWidth, 320);
+  const killsList =
+    notifications.length === 0 ? (
+      <div style={{ color: theme.textMuted, fontSize: 13, fontStyle: 'italic' }}>No kills yet</div>
+    ) : (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {notifications.map((n) => {
+          const selfKill = n.killerId === n.victimId;
+          return (
+            <div
+              key={n.id}
+              style={{
+                fontSize: 14,
+                fontWeight: 600,
+                color: theme.heading,
+                animation: 'notificationIn 0.25s ease',
+              }}
+            >
+              <span style={{ color: state.players[n.killerId].color }}>{describe(n.killerId, true)}</span>
+              {selfKill ? (
+                <>
+                  {` ${n.verb} `}
+                  <span style={{ color: state.players[n.killerId].color }}>{reflexive(n.killerId)}</span>
+                </>
+              ) : (
+                <>
+                  {` ${n.verb} `}
+                  <span style={{ color: state.players[n.victimId].color }}>{describe(n.victimId, false)}</span>
+                </>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    );
 
   const noticeStack = (
     <div
@@ -743,7 +774,7 @@ export function OnlineGame({
   const statusText = sending || animating ? 'Resolving…' : !myTurn ? `Waiting for ${nameFor(state.currentTurn)}…` : null;
 
   return (
-    <div style={{ minHeight: '100vh', padding: 24, boxSizing: 'border-box' }}>
+    <div>
       {pausedOverlay}
       {revealing && highlightId && (
         <div
@@ -866,29 +897,6 @@ export function OnlineGame({
         </div>
       )}
       {noticeStack}
-      <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, marginBottom: 20, flexWrap: 'wrap' }}>
-        <h1 style={{ fontSize: 26 }}>Scavengers</h1>
-        <span style={{ color: theme.textMuted, fontSize: 13 }}>
-          {state.mode === 'lastStanding' ? 'Survival' : 'Deathmatch'}
-        </span>
-        <div style={{ marginLeft: 'auto' }}>
-          <button
-            onClick={() => setShowLeaveConfirm(true)}
-            style={{
-              padding: '6px 12px',
-              fontSize: 12,
-              fontWeight: 500,
-              borderRadius: 8,
-              background: theme.surface,
-              border: `1px solid ${theme.border}`,
-              color: theme.textMuted,
-              cursor: 'pointer',
-            }}
-          >
-            Leave
-          </button>
-        </div>
-      </div>
       {showLeaveConfirm && (
         <ConfirmDialog
           title="Leave game?"
@@ -905,31 +913,67 @@ export function OnlineGame({
         />
       )}
 
-      <div style={{ display: 'flex', gap: 24, alignItems: 'flex-start', justifyContent: 'center', flexWrap: 'wrap' }}>
-        {state.mode === 'lastStanding' ? <Lives state={state} displayName={nameFor} /> : <Leaderboard state={state} displayName={nameFor} />}
-
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}>
-          <ResourceBars player={me} width={columnWidth} preview={preview} showTurnLabel={myTurn && !animating && !revealing} displayName={nameFor(viewerId)} />
-
-          <div style={{ position: 'relative' }}>
-            <Board
-              state={boardState}
-              viewerId={viewerId}
-              cellPixelSize={cellSize}
-              highlights={interactive ? dedupedHighlights : []}
-              onTileClick={interactive ? handleTileClick : undefined}
-              redTints={redTints}
-              deathAnims={deathAnims}
-              previewTints={interactive ? previewHitTiles : []}
-              attackPreparing={
-                interactive &&
-                (flow.kind === 'attackReposition' || flow.kind === 'attackSelect' || flow.kind === 'attackTarget')
-              }
-              visionCenter={interactive ? me.position : undefined}
-            />
+      <GameLayout
+        boardRef={boardRef}
+        controlsRef={controlsRef}
+        title={
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, flexWrap: 'wrap' }}>
+            <h1 style={{ fontSize: 26 }}>Scavengers</h1>
+            <span style={{ color: theme.textMuted, fontSize: 13 }}>
+              {state.mode === 'lastStanding' ? 'Survival' : 'Deathmatch'}
+            </span>
+            <div style={{ marginLeft: 'auto' }}>
+              <button
+                onClick={() => setShowLeaveConfirm(true)}
+                style={{
+                  padding: '6px 12px',
+                  fontSize: 12,
+                  fontWeight: 500,
+                  borderRadius: 8,
+                  background: theme.surface,
+                  border: `1px solid ${theme.border}`,
+                  color: theme.textMuted,
+                  cursor: 'pointer',
+                }}
+              >
+                Leave
+              </button>
+            </div>
           </div>
-
-          <div style={{ ...card, width: columnWidth, boxSizing: 'border-box' }}>
+        }
+        standings={
+          state.mode === 'lastStanding' ? <Lives state={state} displayName={nameFor} /> : <Leaderboard state={state} displayName={nameFor} />
+        }
+        scoreStrip={
+          <ScoreStrip
+            state={state}
+            onOpenStandings={() => setPhonePanel('standings')}
+            onOpenKills={() => setPhonePanel('kills')}
+            killCount={notifications.length}
+          />
+        }
+        bars={
+          <ResourceBars player={me} width={columnWidth} preview={preview} showTurnLabel={myTurn && !animating && !revealing} displayName={nameFor(viewerId)} />
+        }
+        board={
+          <Board
+            state={boardState}
+            viewerId={viewerId}
+            cellPixelSize={cellSize}
+            highlights={interactive ? dedupedHighlights : []}
+            onTileClick={interactive ? handleTileClick : undefined}
+            redTints={redTints}
+            deathAnims={deathAnims}
+            previewTints={interactive ? previewHitTiles : []}
+            attackPreparing={
+              interactive &&
+              (flow.kind === 'attackReposition' || flow.kind === 'attackSelect' || flow.kind === 'attackTarget')
+            }
+            visionCenter={interactive ? me.position : undefined}
+          />
+        }
+        controls={
+          <div style={{ ...card, width: controlsWidth, boxSizing: 'border-box' }}>
             {revealing ? (
               <div style={{ padding: 16, color: theme.textMuted, fontStyle: 'italic' }}>Choosing first turn…</div>
             ) : statusText ? (
@@ -946,60 +990,27 @@ export function OnlineGame({
                 onConfirm={handleConfirm}
                 onBack={handleBack}
                 onCancel={handleCancel}
-                width={columnWidth}
+                width={controlsWidth}
                 maxMoveTiles={maxMoveTiles}
               />
             )}
           </div>
-        </div>
-
-        <div
-          style={{
-            background: theme.surface,
-            border: `1px solid ${theme.border}`,
-            borderRadius: theme.radius,
-            boxShadow: theme.shadow,
-            padding: 16,
-            minWidth: 240,
-            boxSizing: 'border-box',
-          }}
-        >
-          <h3 style={{ marginBottom: 10, fontSize: 15 }}>Kills</h3>
-          {notifications.length === 0 ? (
-            <div style={{ color: theme.textMuted, fontSize: 13, fontStyle: 'italic' }}>No kills yet</div>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {notifications.map((n) => {
-                const selfKill = n.killerId === n.victimId;
-                return (
-                  <div
-                    key={n.id}
-                    style={{
-                      fontSize: 14,
-                      fontWeight: 600,
-                      color: theme.heading,
-                      animation: 'notificationIn 0.25s ease',
-                    }}
-                  >
-                    <span style={{ color: state.players[n.killerId].color }}>{describe(n.killerId, true)}</span>
-                    {selfKill ? (
-                      <>
-                        {` ${n.verb} `}
-                        <span style={{ color: state.players[n.killerId].color }}>{reflexive(n.killerId)}</span>
-                      </>
-                    ) : (
-                      <>
-                        {` ${n.verb} `}
-                        <span style={{ color: state.players[n.victimId].color }}>{describe(n.victimId, false)}</span>
-                      </>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
-      </div>
+        }
+        killsFeed={
+          <div style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: theme.radius, boxShadow: theme.shadow, padding: 16, minWidth: 240, boxSizing: 'border-box' }}>
+            <h3 style={{ marginBottom: 10, fontSize: 15 }}>Kills</h3>
+            {killsList}
+          </div>
+        }
+      />
+      {phonePanel === 'standings' && (
+        <Modal title="Standings" onClose={() => setPhonePanel(null)}>
+          {state.mode === 'lastStanding' ? <Lives state={state} displayName={nameFor} /> : <Leaderboard state={state} displayName={nameFor} />}
+        </Modal>
+      )}
+      {phonePanel === 'kills' && (
+        <Modal title="Kills" onClose={() => setPhonePanel(null)}>{killsList}</Modal>
+      )}
     </div>
   );
 }
