@@ -22,40 +22,45 @@ export function ScoreStrip({ state, onOpenStandings, onOpenKills, lastKill }: Sc
   const showScore = state.mode === 'deathmatch';
 
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: theme.radius, padding: '8px 10px' }}>
-      <button
-        onClick={onOpenStandings}
-        aria-label="Open standings"
-        style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, minWidth: 0, overflowX: 'auto', background: 'none', border: 'none', padding: 0 }}
-      >
-        {state.turnOrder.map((id) => {
-          const p = state.players[id];
-          return (
-            <span key={id} style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0, opacity: p.eliminated ? 0.4 : 1 }}>
-              <span style={{ width: 10, height: 10, borderRadius: '50%', background: p.color, display: 'inline-block' }} />
-              <span style={{ fontSize: 14, fontWeight: 600, fontVariantNumeric: 'tabular-nums', color: theme.text }}>
-                {showScore ? p.score : Math.max(0, state.deathCap - p.deaths)}
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 4, background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: theme.radius, padding: '8px 10px' }}>
+      <span style={{ fontSize: 10, fontWeight: 600, color: theme.textMuted, textTransform: 'uppercase', letterSpacing: 0.4 }}>
+        Leaderboard
+      </span>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <button
+          onClick={onOpenStandings}
+          aria-label="Open standings"
+          style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, minWidth: 0, overflowX: 'auto', background: 'none', border: 'none', padding: 0 }}
+        >
+          {state.turnOrder.map((id) => {
+            const p = state.players[id];
+            return (
+              <span key={id} style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0, opacity: p.eliminated ? 0.4 : 1 }}>
+                <span style={{ width: 10, height: 10, borderRadius: '50%', background: p.color, display: 'inline-block' }} />
+                <span style={{ fontSize: 14, fontWeight: 600, fontVariantNumeric: 'tabular-nums', color: theme.text }}>
+                  {showScore ? p.score : Math.max(0, state.deathCap - p.deaths)}
+                </span>
               </span>
-            </span>
-          );
-        })}
-      </button>
-      <button
-        onClick={onOpenKills}
-        aria-label="Open kills feed"
-        style={{
-          flex: '0 1 42%',
-          minWidth: 0,
-          maxWidth: '55%',
-          fontSize: 12,
-          padding: '4px 10px',
-          overflow: 'hidden',
-          textOverflow: 'ellipsis',
-          whiteSpace: 'nowrap',
-        }}
-      >
-        {lastKill ?? 'No kills yet'}
-      </button>
+            );
+          })}
+        </button>
+        <button
+          onClick={onOpenKills}
+          aria-label="Open kills feed"
+          style={{
+            flex: '0 1 42%',
+            minWidth: 0,
+            maxWidth: '55%',
+            fontSize: 12,
+            padding: '4px 10px',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          {lastKill ?? 'No kills yet'}
+        </button>
+      </div>
     </div>
   );
 }
