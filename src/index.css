@@ -268,6 +268,35 @@ button:disabled {
   }
 }
 
+/* Tablet PORTRAIT only (e.g. 820x1180 iPad). At portrait proportions the
+   two-column tablet arrangement above squeezes the centre column so hard the
+   board bottoms out at its minimum tile size and overflows its wrapper,
+   while well over 1000px of vertical space goes unused. Portrait tablets
+   have height to spare, so give the board the full width up top and put
+   standings/kills side by side beneath it instead of stacked in a squeezed
+   side column. Scoped to 768-1199px so phones (own single-column layout
+   below) and landscape tablets (the block above) are untouched.
+
+   Row rule: `minmax(0, 1fr)` only for the row that must flex/scroll (the
+   centre column, matching `.game-layout__board`'s `flex: 1 1 auto;
+   min-height: 0` — an `auto` row would size to the board's content and
+   create the same self-referential feedback loop useBoardColumn.ts warns
+   about). `auto` for every row that is bounded content and should show in
+   full at its natural height (title, controls, and the standings/kills
+   row) — giving those `1fr` instead squeezes them below natural size, the
+   same regression recorded in the tablet block above. */
+@media (min-width: 768px) and (max-width: 1199px) and (orientation: portrait) {
+  .game-layout {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr) auto auto;
+    grid-template-areas:
+      'title    title'
+      'center   center'
+      'controls controls'
+      'stand    kills';
+  }
+}
+
 @media (max-width: 767px) {
   .game-layout {
     height: auto;
