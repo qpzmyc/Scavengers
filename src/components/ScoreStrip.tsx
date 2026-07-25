@@ -13,6 +13,13 @@ interface ScoreStripProps {
   lastKill: ReactNode | null;
 }
 
+// Hearts are only rendered one-per-life when they're guaranteed to fit. Worst case
+// is MAX_DEATH_CAP (6) lives on 4 players = 24 heart glyphs, which does not fit the
+// ~210px of strip width available on a 375px phone (24 glyphs need roughly 320px).
+// Below this threshold every player's hearts render individually (matching Lives.tsx);
+// at or above it each player collapses to one heart glyph + a numeric count (e.g. "♥6").
+const MAX_TOTAL_HEARTS_FOR_ICONS = 12;
+
 /**
  * Phone-only summary line. In deathmatch the score is the number a player
  * glances at constantly, so it stays on screen rather than going behind a tap;
@@ -20,6 +27,7 @@ interface ScoreStripProps {
  */
 export function ScoreStrip({ state, onOpenStandings, onOpenKills, lastKill }: ScoreStripProps) {
   const showScore = state.mode === 'deathmatch';
+  const showHeartIcons = state.turnOrder.length * state.deathCap <= MAX_TOTAL_HEARTS_FOR_ICONS;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 4, background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: theme.radius, padding: '8px 10px' }}>
@@ -34,12 +42,28 @@ export function ScoreStrip({ state, onOpenStandings, onOpenKills, lastKill }: Sc
         >
           {state.turnOrder.map((id) => {
             const p = state.players[id];
+            const remaining = Math.max(0, state.deathCap - p.deaths);
             return (
               <span key={id} style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0, opacity: p.eliminated ? 0.4 : 1 }}>
                 <span style={{ width: 10, height: 10, borderRadius: '50%', background: p.color, display: 'inline-block' }} />
-                <span style={{ fontSize: 14, fontWeight: 600, fontVariantNumeric: 'tabular-nums', color: theme.text }}>
-                  {showScore ? p.score : Math.max(0, state.deathCap - p.deaths)}
-                </span>
+                {showScore ? (
+                  <span style={{ fontSize: 14, fontWeight: 600, fontVariantNumeric: 'tabular-nums', color: theme.text }}>
+                    {p.score}
+                  </span>
+                ) : showHeartIcons ? (
+                  <span style={{ display: 'flex', gap: 1 }}>
+                    {Array.from({ length: state.deathCap }, (_, i) => (
+                      <span key={i} style={{ fontSize: 12, lineHeight: 1, color: i < remaining ? p.color : theme.border }}>
+                        ♥
+                      </span>
+                    ))}
+                  </span>
+                ) : (
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 2, fontSize: 13, fontWeight: 600, fontVariantNumeric: 'tabular-nums', color: p.color }}>
+                    <span style={{ fontSize: 12, lineHeight: 1 }}>♥</span>
+                    {remaining}
+                  </span>
+                )}
               </span>
             );
           })}
