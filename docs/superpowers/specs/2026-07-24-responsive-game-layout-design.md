@@ -105,9 +105,25 @@ Three arrangements:
 
 | Breakpoint | Arrangement | Page scroll |
 |---|---|---|
-| ≥1200px | `standings │ bars+board+controls │ kills` | none, `100dvh` |
-| 768–1199px | `standings │ bars+board+controls`; kills moves beneath standings | none, `100dvh` |
+| ≥1200px | `standings + kills │ bars+board │ controls` | none, `100dvh` |
+| 768–1199px | `standings + kills │ bars+board`, controls beneath the board | none, `100dvh` |
 | <768px | single column: score strip → bars → board → controls | allowed |
+
+**Amended 2026-07-24, after seeing the desktop layout live.** The original desktop
+arrangement stacked the controls under the board and put the kills feed in a right-hand
+column. Measured at 1440×900 that produced a *smaller* board than before the work started
+— 43px tiles against the old 68px — while 173px of the centre column's width sat unused.
+
+The cause is that the board is square and therefore height-bound, while width is abundant.
+Removing the 68px cap was never the binding constraint. The old code only looked better
+because it cheated: `innerHeight - 140` ignored the resource bars and the control panel
+entirely, which is precisely why the confirm button fell below the fold — the defect this
+work exists to fix.
+
+Moving the controls into a right-hand column returns their height to the board, and moving
+the kills feed under the standings keeps the left column doing the work it was already
+doing. `controls` therefore becomes a **top-level grid area** rather than a child of the
+centre column, so CSS can place it per breakpoint.
 
 `dvh` rather than `vh`, so a mobile browser's collapsing address bar does not cut off the
 controls.
@@ -131,7 +147,17 @@ module. It observes the center column with a `ResizeObserver` and returns:
 `columnWidth` is needed as a number, not a percentage: `ControlPanel` scales its button
 font size and padding from it
 ([ControlPanel.tsx:117](../../../src/components/ControlPanel.tsx#L117)), and `ResourceBars`
-takes a width too. One measurement, two consumers.
+takes a width too.
+
+**Amended:** once the controls move to their own column, one measurement can no longer
+serve both. `columnWidth` tracks the *board's* width, which is correct for `ResourceBars`
+(they sit above the board and align to its edges) but wrong for `ControlPanel` in a
+separate column. The controls column is measured independently.
+
+That column must be a **fixed** width in CSS, not `auto`. `ControlPanel` derives its own
+font size and padding from the width it is handed, so an `auto` column would size to
+content that is itself sized from the column — a circular dependency, and the same class
+of feedback loop described below for the board.
 
 **The feedback-loop hazard.** If the measured element is sized by its own content, the board
 grows → the wrapper grows → the board grows, and the layout oscillates or runs away. The
