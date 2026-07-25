@@ -297,7 +297,14 @@ button:disabled {
   }
 }
 
-@media (max-width: 767px) {
+/* Also gated on height, not just width: a landscape phone (844x390, 926x428)
+   is wider than 767px but only a few hundred px tall, so without this it
+   falls into the tablet block above, which fixes the layout to 100dvh with
+   overflow hidden and no row that can scroll. This single-column arrangement
+   is page-scrollable, which is the only thing that works when height is
+   this tight — a landscape phone is wide but short, and the fixed-height
+   arrangements have nowhere to put the board. */
+@media (max-width: 767px), (max-height: 550px) {
   .game-layout {
     height: auto;
     min-height: 100dvh;
