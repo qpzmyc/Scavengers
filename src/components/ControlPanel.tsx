@@ -103,10 +103,17 @@ const baseBtn: React.CSSProperties = {
 
 // A row of action buttons stretches to fill the full available width (matching
 // the board), with each button growing equally. Stacking (vertical in a narrow
-// controls column, horizontal once there's room) is decided in CSS by a
-// container query on `.game-layout__controls` — see `.control-row` in
-// src/index.css.
-const rowStyle: React.CSSProperties = { display: 'flex', gap: 8, marginTop: 6 };
+// desktop/phone controls column, horizontal in the wide tablet strip) is
+// decided by `--controls-dir`, set once per layout arrangement in
+// src/index.css (see the comment on `.game-layout`) rather than derived from
+// this element's measured width — width alone can't tell a narrow desktop
+// column (which grows with --ui-scale) apart from a wide tablet strip.
+const rowStyle: React.CSSProperties = {
+  display: 'flex',
+  gap: 8,
+  marginTop: 6,
+  flexDirection: 'var(--controls-dir, column)' as React.CSSProperties['flexDirection'],
+};
 
 // The literal fallbacks below (17.78px etc.) match index.css's `:root` values
 // at --ui-scale: 1 (320px / 18 and 320px / 26) — only used if the stylesheet

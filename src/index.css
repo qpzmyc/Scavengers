@@ -219,6 +219,22 @@ button:disabled {
   padding: 24px;
   height: 100dvh;
   overflow: hidden;
+  /* --controls-dir picks .control-row's flex-direction (see below) per LAYOUT
+     ARRANGEMENT, not per measured width. It used to be a container query on
+     `.game-layout__controls` keyed to a 380px width threshold, back when the
+     desktop controls column was a fixed 320px — any arrangement narrower than
+     380px got columns, anything wider got rows, and each arrangement happened
+     to land on a distinctive enough width that this worked. Once `--ui-scale`
+     started scaling that same 320px column (see the >= 1600px media query far
+     below), the desktop column itself could cross 380px while remaining the
+     same narrow "stack these buttons" arrangement it always was — a width
+     threshold can't tell "narrow desktop column, now scaled up" apart from
+     "wide tablet strip that was always meant to be a row." Setting this
+     explicitly per arrangement (desktop here; tablet/phone in their own media
+     queries below) is the only way to keep that distinction as --ui-scale (or
+     the column width) changes. Desktop's is `column` — the controls are a
+     narrow right-hand column at every --ui-scale value. */
+  --controls-dir: column;
   /* The controls column is a fixed 320px (scaled by --ui-scale), not `auto` or a
      fraction. ControlPanel's buttons take their font size and padding from CSS
      custom properties (--btn-font/--btn-pad-v/--btn-pad-h in :root, see
@@ -256,36 +272,19 @@ button:disabled {
 
 .game-layout__standings { grid-area: stand; }
 .game-layout__kills { grid-area: kills; }
-/* container-type/-name make this element's own rendered width queryable by
-   .control-row below — the same width `controlsRef`/`useElementWidth` measures
-   for the placeholder card that sits next to ControlPanel, so the stacking
-   breakpoint stays exactly in sync with that. This replaces the old JS
-   STACK_BELOW_PX comparison in ControlPanel.tsx; see .control-row for why. */
 .game-layout__controls {
   grid-area: controls;
-  container-type: inline-size;
-  container-name: controls;
 }
 
-/* ControlPanel's button rows: stacked (column) in a narrow controls column,
-   side-by-side (row) once there's room. Previously a JS breakpoint
-   (STACK_BELOW_PX = 380 in ControlPanel.tsx) compared against the numeric
-   `width` prop measured by useElementWidth; moved here so it can key off the
-   container query above instead, now that ControlPanel no longer needs a
-   numeric width for anything else. 380px is unchanged from the old JS value —
-   at the default unscaled 320px column this still evaluates to stacked
-   (column), matching today exactly. */
+/* ControlPanel's button rows. Direction comes from --controls-dir (set once
+   per arrangement above/below, not from this element's measured width — see
+   the comment on `.game-layout`'s --controls-dir for why width is the wrong
+   signal). ControlPanel.tsx reads the same variable inline so no JavaScript
+   decides direction. */
 .control-row {
   display: flex;
   gap: 8px;
   margin-top: 6px;
-  flex-direction: column;
-}
-
-@container controls (min-width: 380px) {
-  .control-row {
-    flex-direction: row;
-  }
 }
 
 .game-layout__center {
@@ -327,6 +326,9 @@ button:disabled {
       'stand center'
       'kills center'
       '.     controls';
+    /* Controls sit under the board, spanning the centre column — wide, so
+       buttons go side by side. */
+    --controls-dir: row;
   }
 }
 
@@ -361,6 +363,8 @@ button:disabled {
       'center   center'
       'controls controls'
       'stand    kills';
+    /* Controls span both columns here too — wide, so buttons go side by side. */
+    --controls-dir: row;
   }
 
   /* Row 4 used to be plain `auto`, which sizes to the MAX-CONTENT of every item
@@ -416,6 +420,9 @@ button:disabled {
       'strip'
       'center'
       'controls';
+    /* Narrow single column — four buttons in a row would be ~85px each at
+       375px wide. Stack for usability and touch targets. */
+    --controls-dir: column;
   }
 
   .game-layout__standings,
