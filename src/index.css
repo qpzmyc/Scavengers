@@ -282,18 +282,54 @@ button:disabled {
    min-height: 0` — an `auto` row would size to the board's content and
    create the same self-referential feedback loop useBoardColumn.ts warns
    about). `auto` for every row that is bounded content and should show in
-   full at its natural height (title, controls, and the standings/kills
-   row) — giving those `1fr` instead squeezes them below natural size, the
-   same regression recorded in the tablet block above. */
+   full at its natural height (title, controls) — giving those `1fr` instead
+   squeezes them below natural size, the same regression recorded in the
+   tablet block above.
+
+   Row 4 (standings/kills) is `minmax(auto, 340px)`, NOT plain `auto` — see
+   the comment on `.game-layout__kills` below for why a growing kills feed
+   made plain `auto` shrink the board mid-game, and why this fixed cap is
+   sized the way it is. */
 @media (min-width: 768px) and (max-width: 1199px) and (orientation: portrait) {
   .game-layout {
     grid-template-columns: auto minmax(0, 1fr); /* Standings takes natural width (~444px), kills absorbs remainder */
-    grid-template-rows: auto minmax(0, 1fr) auto auto;
+    grid-template-rows: auto minmax(0, 1fr) auto minmax(auto, 340px);
     grid-template-areas:
       'title    title'
       'center   center'
       'controls controls'
       'stand    kills';
+  }
+
+  /* Row 4 used to be plain `auto`, which sizes to the MAX-CONTENT of every item
+     in the row — for the kills feed (an ever-growing list of notifications),
+     that's its full unscrolled height, not the height it's clipped to by its
+     own `overflow-y: auto` (overflow only affects what's painted, not what
+     CSS Grid counts during auto track sizing). So as kills piled up, row 4
+     kept growing and eating into row 2's `minmax(0, 1fr)` centre column —
+     i.e. the board visibly shrank as the game went on, which is disorienting
+     and must not happen.
+
+     `minmax(auto, 340px)` keeps the "size to content" behavior for a short
+     game (few kills, or a small standings card) but stops the row from
+     growing past 340px once the kills feed gets tall. 340px comfortably
+     covers the worst-case standings card — 4 players, deathmatch's
+     Leaderboard: ~32px card padding + ~29px title row + ~34px metric-header
+     row + 4 * 42px (ROW_H) player rows + ~21px footer note ≈ 284px, plus a
+     border and a buffer for font-rendering variance — so standings is never
+     the one that gets clipped; past that point it's the kills card that's
+     capped and scrolls internally (via the `overflow-y: auto` it already has
+     from the shared rule above) — same list, same order as every other
+     breakpoint, just clipped to a fixed viewport instead of an ever-growing
+     one. `max-height: 100%` makes the cap explicit instead of relying only
+     on the default grid-item stretch to size it.
+
+     Scoped to this breakpoint only — do not move this to the desktop/
+     landscape-tablet rules above (row 3 there is deliberately `minmax(0, 1fr)`
+     and already scrolls, see that block's own comment) or to the phone rule
+     below (kills is a modal there, not a grid row). */
+  .game-layout__kills {
+    max-height: 100%;
   }
 }
 
