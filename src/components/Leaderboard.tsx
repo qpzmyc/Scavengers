@@ -8,9 +8,13 @@ interface LeaderboardProps {
   displayName?: (id: PlayerId) => string;
 }
 
-// Fixed row height so rows can be absolutely positioned and slide (transform) between
-// ranks when the sort order changes.
-const ROW_H = 42;
+// Row height so rows can be absolutely positioned and slide (transform) between
+// ranks when the sort order changes. The actual pixel value lives in the
+// `--lb-row-h` custom property (src/index.css, scaled by `--ui-scale`) — the
+// height/transform below read it via `calc()` so `rank` and `ids.length` stay
+// the only JS-supplied numbers. The `42px` here is only the `var()` fallback,
+// used if the stylesheet is ever missing; keep it equal to index.css's default.
+const ROW_H = 'var(--lb-row-h, 42px)';
 
 // The metric columns are a FIXED width, not `auto`. The header row and the player rows
 // are two separate grids (rows have to be their own grid so they can be absolutely
@@ -121,7 +125,7 @@ export function Leaderboard({ state, displayName }: LeaderboardProps) {
 
       {/* Positioned rows: each keyed by player id (so React keeps the DOM node) and
           translated to its current rank, with a transition for animated re-ranking. */}
-      <div style={{ position: 'relative', height: ids.length * ROW_H }}>
+      <div style={{ position: 'relative', height: `calc(${ROW_H} * ${ids.length})` }}>
         {ids.map((id) => {
           const p = state.players[id];
           const rank = rankOf.get(id) ?? 0;
@@ -139,7 +143,7 @@ export function Leaderboard({ state, displayName }: LeaderboardProps) {
                 alignItems: 'center',
                 borderTop: `1px solid ${theme.border}`,
                 boxSizing: 'border-box',
-                transform: `translateY(${rank * ROW_H}px)`,
+                transform: `translateY(calc(${ROW_H} * ${rank}))`,
                 transition: 'transform 0.45s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.35s ease',
                 opacity: p.eliminated ? 0.4 : 1,
               }}
