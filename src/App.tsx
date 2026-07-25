@@ -1065,7 +1065,7 @@ function App() {
     return (
       <div
         style={{
-          minHeight: '100vh',
+          minHeight: '100dvh',
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',
@@ -1073,6 +1073,7 @@ function App() {
           gap: 28,
           padding: 24,
           boxSizing: 'border-box',
+          overflowY: 'auto',
         }}
       >
         {menuChrome}
@@ -1084,7 +1085,7 @@ function App() {
             {next.color.toUpperCase()}'s turn
           </h1>
         </div>
-        <div style={{ transform: 'scale(1.35)', transformOrigin: 'top center', marginTop: 10, marginBottom: 96 }}>
+        <div style={{ marginTop: 10, marginBottom: 96 }}>
           {state.mode === 'lastStanding' ? <Lives state={state} /> : <Leaderboard state={state} />}
         </div>
         <button
@@ -1174,6 +1175,7 @@ function App() {
             gap: 28,
             padding: 24,
             boxSizing: 'border-box',
+            overflowY: 'auto',
             pointerEvents: winScreenReady ? 'auto' : 'none',
           }}
         >
@@ -1196,7 +1198,7 @@ function App() {
                     )
                   : <>{renderColoredText(state.players[state.winner!].color.toUpperCase(), colorSet)} Wins!</>}
               </h1>
-              <div style={{ transform: 'scale(1.1)', transformOrigin: 'top center' }}>
+              <div>
                 {state.mode === 'lastStanding' ? <Lives state={state} /> : <Leaderboard state={state} />}
               </div>
               <button

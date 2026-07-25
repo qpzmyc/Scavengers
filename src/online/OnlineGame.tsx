@@ -828,6 +828,7 @@ export function OnlineGame({
             gap: 28,
             padding: 24,
             boxSizing: 'border-box',
+            overflowY: 'auto',
             pointerEvents: winScreen ? 'auto' : 'none',
           }}
         >
@@ -853,7 +854,7 @@ export function OnlineGame({
                   <>{colorName(winnerId!, nameFor(winnerId!), state)} Wins!</>
                 )}
               </h1>
-              <div style={{ transform: 'scale(1.1)', transformOrigin: 'top center' }}>
+              <div>
                 {state.mode === 'lastStanding' ? <Lives state={state} displayName={nameFor} /> : <Leaderboard state={state} displayName={nameFor} />}
               </div>
               <button
