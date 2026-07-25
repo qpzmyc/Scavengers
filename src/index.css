@@ -7,6 +7,12 @@
   --border: #2c3441;
   --accent: #5b8cff;
 
+  --lb-name-col: 140px;
+  --lb-metric-col: 68px;
+  --lb-cell-pad: 10px;
+  --lb-head-font: 12px;
+  --lb-value-font: 16px;
+
   color-scheme: dark;
   font-family: system-ui, 'Segoe UI', Roboto, sans-serif;
   font-size: 15px;
@@ -295,5 +301,32 @@ button:disabled {
     flex: none;
     aspect-ratio: 1;
     height: auto;
+  }
+}
+
+/* The standings/kills panels move into a Modal on phone (see App.tsx), which
+   renders as a JSX/DOM sibling of `.game-layout`, not a descendant — so these
+   overrides go on `:root`, the same selector the defaults live on, rather
+   than on `.game-layout` (which would never cascade to the modal).
+
+   Arithmetic at a 375px viewport: Modal is now `min(calc(100vw - 32px), 360px)`
+   wide (see Modal.tsx) with `--modal-pad` 16px on each side, leaving
+   375 - 32 - 32 = 311px of content width. The Leaderboard card adds its own
+   16px padding each side, leaving 311 - 32 = 279px for the grid... but the
+   grid only needs 88 (name) + 4*46 (metric cols, deathmatch's worst case of
+   4) + the card's own 32px padding = 304px measured the same way the 444px
+   desktop figure was (i.e. including the card padding in the total, not
+   double-subtracting it): 88 + 184 + 32 = 304px, which fits inside the 311px
+   available. Widening any of these without rechecking this budget will
+   re-clip the card on a 375px phone. */
+@media (max-width: 767px) {
+  :root {
+    --lb-name-col: 88px;
+    --lb-metric-col: 46px;
+    --lb-cell-pad: 5px;
+    --lb-head-font: 10px;
+    --lb-value-font: 14px;
+
+    --modal-pad: 16px;
   }
 }

@@ -17,24 +17,32 @@ const ROW_H = 42;
 // positioned for the rank animation above), and `auto` tracks are sized from each
 // grid's own content — the header measured its long labels while the rows measured a
 // single digit and collapsed to the minimum, so the numbers drifted right of their
-// headers. A fixed width can't resolve differently between the two.
-const METRIC_COL_W = 68;
-
-// The player-name column needs an explicit floor: the rows are absolutely positioned
-// (for the rank animation), so they contribute nothing to the card's intrinsic width —
-// only the header row does. Without a min the column collapses to the width of the
-// word "Player" and every name ellipsises.
-const NAME_COL_MIN = 140;
+// headers. A fixed width can't resolve differently between the two. Both grids below
+// read the *same* `gridTemplateColumns` string, built from the same `--lb-metric-col`
+// custom property, so they can never drift apart — do not give them separately
+// computed values, and do not reintroduce `auto`/`minmax(x, auto)` here.
+//
+// The player-name column needs an explicit floor for the same reason: the rows are
+// absolutely positioned (for the rank animation), so they contribute nothing to the
+// card's intrinsic width — only the header row does. Without a min the column
+// collapses to the width of the word "Player" and every name ellipsises.
+//
+// Both tracks (and the cell padding/font sizes below) come from CSS custom
+// properties defined in src/index.css (`:root` for desktop/tablet, a
+// `@media (max-width: 767px)` override for phone) so the breakpoint stays in CSS
+// and this component doesn't need to know the viewport width. The literal values
+// here are only the `var()` fallbacks, used if the stylesheet is ever missing —
+// keep them equal to index.css's `:root` defaults.
 
 const cell: React.CSSProperties = {
   display: 'flex',
   alignItems: 'center',
   justifyContent: 'flex-end',
   fontVariantNumeric: 'tabular-nums',
-  fontSize: 16,
+  fontSize: 'var(--lb-value-font, 16px)',
   fontWeight: 600,
   color: theme.text,
-  padding: '0 10px',
+  padding: '0 var(--lb-cell-pad, 10px)',
 };
 
 // Two-line header: label on top, scoring delta beneath. Bottom-aligned so the
@@ -44,10 +52,10 @@ const headCell: React.CSSProperties = {
   flexDirection: 'column',
   alignItems: 'flex-end',
   justifyContent: 'flex-end',
-  padding: '0 10px 6px',
+  padding: '0 var(--lb-cell-pad, 10px) 6px',
   color: theme.textMuted,
   fontWeight: 500,
-  fontSize: 12,
+  fontSize: 'var(--lb-head-font, 12px)',
   lineHeight: 1.25,
   textTransform: 'uppercase',
   letterSpacing: 0.4,
@@ -66,7 +74,7 @@ export function Leaderboard({ state, displayName }: LeaderboardProps) {
   const showScore = state.mode === 'deathmatch';
   const ids = state.turnOrder;
   const metricCount = 3 + (showScore ? 1 : 0);
-  const gridTemplateColumns = `minmax(${NAME_COL_MIN}px,1fr) repeat(${metricCount}, ${METRIC_COL_W}px)`;
+  const gridTemplateColumns = `minmax(var(--lb-name-col, 140px),1fr) repeat(${metricCount}, var(--lb-metric-col, 68px))`;
 
   // Rank order, recomputed every render: active players first (removed/eliminated sink
   // to the bottom), then by score descending in deathmatch, with turn order as a stable
