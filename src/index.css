@@ -287,7 +287,7 @@ button:disabled {
    same regression recorded in the tablet block above. */
 @media (min-width: 768px) and (max-width: 1199px) and (orientation: portrait) {
   .game-layout {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-columns: auto minmax(0, 1fr); /* Standings takes natural width (~444px), kills absorbs remainder */
     grid-template-rows: auto minmax(0, 1fr) auto auto;
     grid-template-areas:
       'title    title'
