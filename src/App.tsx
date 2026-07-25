@@ -1140,6 +1140,17 @@ function App() {
 
   const barsPlayer = state.players[state.currentTurn];
 
+  // Most recent kill for the phone strip's mini tracker — same text/coloring as
+  // the last entry in the full kills feed below, just not wrapped in its own row.
+  const lastNotification = notifications[notifications.length - 1];
+  const lastKill: ReactNode | null = lastNotification ? (
+    <>
+      <span style={{ color: lastNotification.killerColor }}>{lastNotification.killerName.toUpperCase()}</span>
+      {` ${lastNotification.verb} `}
+      <span style={{ color: lastNotification.victimColor }}>{lastNotification.victimName.toUpperCase()}</span>
+    </>
+  ) : null;
+
   const killsList =
     notifications.length === 0 ? (
       <div style={{ color: theme.textMuted, fontSize: 13, fontStyle: 'italic' }}>No kills yet</div>
@@ -1238,7 +1249,7 @@ function App() {
             state={state}
             onOpenStandings={() => setPhonePanel('standings')}
             onOpenKills={() => setPhonePanel('kills')}
-            killCount={notifications.length}
+            lastKill={lastKill}
           />
         }
         bars={

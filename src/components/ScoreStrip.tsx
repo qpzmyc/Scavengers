@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import type { GameState } from '../engine';
 import { theme } from '../theme';
 
@@ -5,7 +6,11 @@ interface ScoreStripProps {
   state: GameState;
   onOpenStandings: () => void;
   onOpenKills: () => void;
-  killCount: number;
+  // Ready-made kill text for the most recent kill (already colored/worded by the
+  // caller — App.tsx and OnlineGame.tsx build kill text differently, so ScoreStrip
+  // stays ignorant of both and just renders whatever it's handed). `null` before
+  // the first kill of the game.
+  lastKill: ReactNode | null;
 }
 
 /**
@@ -13,7 +18,7 @@ interface ScoreStripProps {
  * glances at constantly, so it stays on screen rather than going behind a tap;
  * the full standings and the kills feed open as modals.
  */
-export function ScoreStrip({ state, onOpenStandings, onOpenKills, killCount }: ScoreStripProps) {
+export function ScoreStrip({ state, onOpenStandings, onOpenKills, lastKill }: ScoreStripProps) {
   const showScore = state.mode === 'deathmatch';
 
   return (
@@ -35,8 +40,21 @@ export function ScoreStrip({ state, onOpenStandings, onOpenKills, killCount }: S
           );
         })}
       </button>
-      <button onClick={onOpenKills} aria-label="Open kills feed" style={{ flexShrink: 0, fontSize: 12, padding: '4px 10px' }}>
-        Kills {killCount > 0 ? killCount : ''}
+      <button
+        onClick={onOpenKills}
+        aria-label="Open kills feed"
+        style={{
+          flex: '0 1 42%',
+          minWidth: 0,
+          maxWidth: '55%',
+          fontSize: 12,
+          padding: '4px 10px',
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          whiteSpace: 'nowrap',
+        }}
+      >
+        {lastKill ?? 'No kills yet'}
       </button>
     </div>
   );

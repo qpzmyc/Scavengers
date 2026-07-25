@@ -683,6 +683,27 @@ export function OnlineGame({
     borderRadius: theme.radius,
     boxShadow: theme.shadow,
   };
+  // Most recent kill for the phone strip's mini tracker — reuses the same
+  // viewer-aware describe()/reflexive() wording as the last row of the full
+  // kills feed below, just not wrapped in its own row.
+  const lastNotification = notifications[notifications.length - 1];
+  const lastKill: ReactNode | null = lastNotification ? (
+    <>
+      <span style={{ color: state.players[lastNotification.killerId].color }}>{describe(lastNotification.killerId, true)}</span>
+      {lastNotification.killerId === lastNotification.victimId ? (
+        <>
+          {` ${lastNotification.verb} `}
+          <span style={{ color: state.players[lastNotification.killerId].color }}>{reflexive(lastNotification.killerId)}</span>
+        </>
+      ) : (
+        <>
+          {` ${lastNotification.verb} `}
+          <span style={{ color: state.players[lastNotification.victimId].color }}>{describe(lastNotification.victimId, false)}</span>
+        </>
+      )}
+    </>
+  ) : null;
+
   const killsList =
     notifications.length === 0 ? (
       <div style={{ color: theme.textMuted, fontSize: 13, fontStyle: 'italic' }}>No kills yet</div>
@@ -950,7 +971,7 @@ export function OnlineGame({
             state={state}
             onOpenStandings={() => setPhonePanel('standings')}
             onOpenKills={() => setPhonePanel('kills')}
-            killCount={notifications.length}
+            lastKill={lastKill}
           />
         }
         bars={
