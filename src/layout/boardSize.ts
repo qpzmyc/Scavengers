@@ -4,6 +4,12 @@ import { GRID_SIZE } from '../engine';
 // its container instead of shrinking further.
 export const MIN_CELL_PX = 28;
 
+// Board.tsx renders content-box with 6px padding each side, so the board's
+// real rendered size is GRID_SIZE * cell + this, on both axes. Must be
+// subtracted before fitting the board into a measured box, or the board
+// overshoots the box it was sized from by this many pixels.
+export const BOARD_CHROME_PX = 12;
+
 /**
  * The pixel size of one board tile, given the space the board has to work with.
  *
@@ -13,7 +19,7 @@ export const MIN_CELL_PX = 28;
  * board floating in empty space.
  */
 export function boardCellSize(availW: number, availH: number): number {
-  const limiting = Math.min(availW, availH);
+  const limiting = Math.min(availW, availH) - BOARD_CHROME_PX;
   if (!Number.isFinite(limiting) || limiting <= 0) return MIN_CELL_PX;
   return Math.max(MIN_CELL_PX, Math.floor(limiting / GRID_SIZE));
 }

@@ -1,6 +1,6 @@
 import { useCallback, useRef, useState } from 'react';
 import { GRID_SIZE } from '../engine';
-import { boardCellSize, MIN_CELL_PX } from './boardSize';
+import { boardCellSize, BOARD_CHROME_PX, MIN_CELL_PX } from './boardSize';
 
 /**
  * Measures the board's wrapper and derives the board's tile size from it.
@@ -48,7 +48,7 @@ export function useBoardColumn() {
       const cellSize = boardCellSize(box.width, box.height);
       // columnWidth tracks the board's rendered width (not the wrapper's width) so that
       // ResourceBars and ControlPanel align flush with the board's left and right edges.
-      const boardWidth = GRID_SIZE * cellSize + 12;
+      const boardWidth = GRID_SIZE * cellSize + BOARD_CHROME_PX;
       const next = {
         cellSize,
         columnWidth: Math.max(boardWidth, 320),
