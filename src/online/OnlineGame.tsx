@@ -709,7 +709,7 @@ export function OnlineGame({
       <div style={{ color: theme.textMuted, fontSize: 13, fontStyle: 'italic' }}>No kills yet</div>
     ) : (
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-        {notifications.map((n) => {
+        {[...notifications].reverse().map((n) => {
           const selfKill = n.killerId === n.victimId;
           return (
             <div

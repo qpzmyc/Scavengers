@@ -1156,7 +1156,7 @@ function App() {
       <div style={{ color: theme.textMuted, fontSize: 13, fontStyle: 'italic' }}>No kills yet</div>
     ) : (
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-        {notifications.map((n) => (
+        {[...notifications].reverse().map((n) => (
           <div key={n.id} style={{ fontSize: 'var(--kills-font, 14px)', fontWeight: 600, color: theme.heading, animation: 'notificationIn 0.25s ease' }}>
             <span style={{ color: n.killerColor }}>{n.killerName.toUpperCase()}</span>
             {` ${n.verb} `}
