@@ -44,6 +44,32 @@
   --btn-pad-v: calc(320px / 26 * var(--ui-scale));
   --btn-pad-h: calc(320px / 18 * var(--ui-scale));
 
+  /* Every other px length in ControlPanel.tsx that contributes to the panel's
+     or a button's box size, so the button keeps the exact same proportions as
+     --btn-font/--btn-pad-v/-h grow it (see sizedBtn's comment above — the old
+     bug was these staying fixed while font/padding scaled, drifting the
+     aspect ratio). Bases are today's literal pixel values, so at --ui-scale:1
+     every one of these calc()s reduces to the same number the component used
+     to hardcode — pixel-identical to before this was added.
+     --btn-radius scales too (a radius that stays fixed on a much bigger
+     button reads as too-sharp a corner); border-width is deliberately left
+     out of this list and stays a flat 1px — a hairline that thickens with
+     scale looks heavy. */
+  --panel-pad: calc(16px * var(--ui-scale));
+  --title-font: calc(20px * var(--ui-scale));
+  --title-mb: calc(6px * var(--ui-scale));
+  --hint-font: calc(13px * var(--ui-scale));
+  --hint-mt: calc(4px * var(--ui-scale));
+  --hint-mb: calc(12px * var(--ui-scale));
+  --row-gap: calc(8px * var(--ui-scale));
+  --row-mt: calc(6px * var(--ui-scale));
+  --badge-gap: calc(9px * var(--ui-scale));
+  --badge-mt: calc(4px * var(--ui-scale));
+  --badge-font: calc(11px * var(--ui-scale));
+  --badge-item-gap: calc(3px * var(--ui-scale));
+  --dot-size: calc(8px * var(--ui-scale));
+  --btn-radius: calc(8px * var(--ui-scale));
+
   color-scheme: dark;
   font-family: system-ui, 'Segoe UI', Roboto, sans-serif;
   font-size: 15px;

@@ -21,13 +21,16 @@ interface CostItem {
 }
 const DOT_COLOR: Record<CostKind, string> = { energy: theme.energy, ammo: theme.ammo };
 
+// The literal fallbacks below match index.css's `:root` values at
+// --ui-scale: 1 — only used if the stylesheet is ever missing, same pattern
+// as sizedBtn's fallbacks further down.
 function CostBadge({ items }: { items: CostItem[] }) {
   return (
-    <span style={{ display: 'flex', gap: 9, alignItems: 'center', marginTop: 4, fontSize: 11, fontWeight: 700 }}>
+    <span style={{ display: 'flex', gap: 'var(--badge-gap, 9px)', alignItems: 'center', marginTop: 'var(--badge-mt, 4px)', fontSize: 'var(--badge-font, 11px)', fontWeight: 700 }}>
       {items.map((it, i) => (
-        <span key={i} style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+        <span key={i} style={{ display: 'inline-flex', alignItems: 'center', gap: 'var(--badge-item-gap, 3px)' }}>
           <span>{it.sign}{it.amount ?? ''}</span>
-          <span style={{ width: 8, height: 8, borderRadius: '50%', background: DOT_COLOR[it.kind], display: 'inline-block' }} />
+          <span style={{ width: 'var(--dot-size, 8px)', height: 'var(--dot-size, 8px)', borderRadius: '50%', background: DOT_COLOR[it.kind], display: 'inline-block' }} />
         </span>
       ))}
     </span>
@@ -96,7 +99,10 @@ const baseBtn: React.CSSProperties = {
   margin: '4px 6px 4px 0',
   fontSize: 14,
   fontWeight: 500,
-  borderRadius: 8,
+  // Scales with everything else — a radius that stayed fixed would look
+  // too-sharp on a much bigger button. border-width stays a flat 1px on
+  // purpose (see the `btn()` variants below); a scaling hairline looks heavy.
+  borderRadius: 'var(--btn-radius, 8px)',
   cursor: 'pointer',
   transition: 'background 0.15s, border-color 0.15s',
 };
@@ -110,8 +116,8 @@ const baseBtn: React.CSSProperties = {
 // column (which grows with --ui-scale) apart from a wide tablet strip.
 const rowStyle: React.CSSProperties = {
   display: 'flex',
-  gap: 8,
-  marginTop: 6,
+  gap: 'var(--row-gap, 8px)',
+  marginTop: 'var(--row-mt, 6px)',
   flexDirection: 'var(--controls-dir, column)' as React.CSSProperties['flexDirection'],
 };
 
@@ -146,9 +152,11 @@ function btn(variant: Variant, disabled: boolean, active = false): React.CSSProp
   return { ...baseBtn, background: theme.surface, border: `1px solid ${theme.border}`, color: theme.text };
 }
 
-const wrap: React.CSSProperties = { padding: 16 };
-const title: React.CSSProperties = { fontWeight: 800, fontSize: 20, letterSpacing: 0.2, marginBottom: 6, color: theme.heading };
-const hint: React.CSSProperties = { margin: '4px 0 12px', color: theme.textMuted, fontSize: 13 };
+// Fallbacks here match index.css's `:root` values at --ui-scale: 1, same
+// pattern as sizedBtn's — only used if the stylesheet is ever missing.
+const wrap: React.CSSProperties = { padding: 'var(--panel-pad, 16px)' };
+const title: React.CSSProperties = { fontWeight: 800, fontSize: 'var(--title-font, 20px)', letterSpacing: 0.2, marginBottom: 'var(--title-mb, 6px)', color: theme.heading };
+const hint: React.CSSProperties = { margin: 'var(--hint-mt, 4px) 0 var(--hint-mb, 12px)', color: theme.textMuted, fontSize: 'var(--hint-font, 13px)' };
 
 export function ControlPanel({
   flow,
