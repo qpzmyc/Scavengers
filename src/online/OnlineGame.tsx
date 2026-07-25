@@ -715,7 +715,7 @@ export function OnlineGame({
             <div
               key={n.id}
               style={{
-                fontSize: 14,
+                fontSize: 'var(--kills-font, 14px)',
                 fontWeight: 600,
                 color: theme.heading,
                 animation: 'notificationIn 0.25s ease',
@@ -1012,14 +1012,13 @@ export function OnlineGame({
                 onConfirm={handleConfirm}
                 onBack={handleBack}
                 onCancel={handleCancel}
-                width={controlsWidth}
                 maxMoveTiles={maxMoveTiles}
               />
             )}
           </div>
         }
         killsFeed={
-          <div style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: theme.radius, boxShadow: theme.shadow, padding: 16, minWidth: 240, boxSizing: 'border-box' }}>
+          <div style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: theme.radius, boxShadow: theme.shadow, padding: 'var(--kills-pad, 16px)', minWidth: 240, boxSizing: 'border-box' }}>
             <h3 style={{ marginBottom: 10, fontSize: 15 }}>Kills</h3>
             {killsList}
           </div>

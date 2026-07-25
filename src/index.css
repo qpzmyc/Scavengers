@@ -7,11 +7,42 @@
   --border: #2c3441;
   --accent: #5b8cff;
 
-  --lb-name-col: 140px;
-  --lb-metric-col: 68px;
-  --lb-cell-pad: 10px;
-  --lb-head-font: 12px;
-  --lb-value-font: 16px;
+  /* Grows the side panels (leaderboard, kills, action buttons) and their text to
+     fill space the board was never going to use. Only ever raised at a width
+     where measurement showed the board is HEIGHT-bound rather than WIDTH-bound
+     (see the >= 1600px media query far below and the .game-layout comment) — at
+     every narrower size it stays 1, so panels are pixel-identical to before this
+     was added. Never lower the threshold or add a rise at tablet/phone sizes:
+     the board's square shape means widening a side column at those sizes comes
+     directly out of the board's width. */
+  --ui-scale: 1;
+
+  --lb-name-col: calc(140px * var(--ui-scale));
+  --lb-metric-col: calc(68px * var(--ui-scale));
+  --lb-cell-pad: calc(10px * var(--ui-scale));
+  --lb-head-font: calc(12px * var(--ui-scale));
+  --lb-value-font: calc(16px * var(--ui-scale));
+  /* Row height for Leaderboard.tsx's absolutely-positioned, rank-animated rows.
+     JS only ever multiplies this by `rank`/`ids.length` inside calc() — the
+     actual pixel value lives here so it scales with everything else. */
+  --lb-row-h: calc(42px * var(--ui-scale));
+
+  /* Kills panel: notification row text and the card's own padding. */
+  --kills-font: calc(14px * var(--ui-scale));
+  --kills-pad: calc(16px * var(--ui-scale));
+
+  /* Action button sizing (ControlPanel.tsx's sizedBtn). Bases reproduce exactly
+     what the old width-derived formulas gave at a 320px controls column
+     (today's default): fontSize = clamp(13, 320/18, 22) = 17.7778px,
+     paddingV = clamp(8, 320/26, 18) = 12.3077px, paddingH = clamp(10, 320/18, 24)
+     = 17.7778px — all three comfortably inside their old clamps, so writing them
+     as the unclamped division reproduces today's look exactly. Multiplying all
+     three by the same --ui-scale keeps their proportions locked together as they
+     grow, instead of the old per-property clamps that let padding cap out while
+     the button kept widening. */
+  --btn-font: calc(320px / 18 * var(--ui-scale));
+  --btn-pad-v: calc(320px / 26 * var(--ui-scale));
+  --btn-pad-h: calc(320px / 18 * var(--ui-scale));
 
   color-scheme: dark;
   font-family: system-ui, 'Segoe UI', Roboto, sans-serif;
@@ -188,13 +219,14 @@ button:disabled {
   padding: 24px;
   height: 100dvh;
   overflow: hidden;
-  /* The controls column is a fixed 320px, not `auto` or a fraction. ControlPanel
-     derives its own font size and padding from the width it is handed (see
+  /* The controls column is a fixed 320px (scaled by --ui-scale), not `auto` or a
+     fraction. ControlPanel's buttons take their font size and padding from CSS
+     custom properties (--btn-font/--btn-pad-v/--btn-pad-h in :root, see
      sizedBtn in ControlPanel.tsx), so an `auto` column would size itself to
      content that is itself sized from the column — the same kind of
      self-referential feedback loop the board wrapper's comment below warns
      about, just running through the grid track instead of flexbox. */
-  grid-template-columns: auto minmax(0, 1fr) 320px;
+  grid-template-columns: auto minmax(0, 1fr) calc(320px * var(--ui-scale));
   grid-template-rows: auto minmax(0, 1fr) minmax(0, 1fr);
   grid-template-areas:
     'title title  title'
@@ -224,7 +256,37 @@ button:disabled {
 
 .game-layout__standings { grid-area: stand; }
 .game-layout__kills { grid-area: kills; }
-.game-layout__controls { grid-area: controls; }
+/* container-type/-name make this element's own rendered width queryable by
+   .control-row below — the same width `controlsRef`/`useElementWidth` measures
+   for the placeholder card that sits next to ControlPanel, so the stacking
+   breakpoint stays exactly in sync with that. This replaces the old JS
+   STACK_BELOW_PX comparison in ControlPanel.tsx; see .control-row for why. */
+.game-layout__controls {
+  grid-area: controls;
+  container-type: inline-size;
+  container-name: controls;
+}
+
+/* ControlPanel's button rows: stacked (column) in a narrow controls column,
+   side-by-side (row) once there's room. Previously a JS breakpoint
+   (STACK_BELOW_PX = 380 in ControlPanel.tsx) compared against the numeric
+   `width` prop measured by useElementWidth; moved here so it can key off the
+   container query above instead, now that ControlPanel no longer needs a
+   numeric width for anything else. 380px is unchanged from the old JS value —
+   at the default unscaled 320px column this still evaluates to stacked
+   (column), matching today exactly. */
+.control-row {
+  display: flex;
+  gap: 8px;
+  margin-top: 6px;
+  flex-direction: column;
+}
+
+@container controls (min-width: 380px) {
+  .control-row {
+    flex-direction: row;
+  }
+}
 
 .game-layout__center {
   grid-area: center;
@@ -400,5 +462,20 @@ button:disabled {
     --lb-value-font: 14px;
 
     --modal-pad: 16px;
+  }
+}
+
+/* --ui-scale only rises here. At 1200-1599px the centre board column is still
+   WIDTH-bound — it's whatever's left after the side columns take their fixed
+   share, so growing those columns would shrink the board. Measurement showed
+   that flips at 1600px: past that width the board becomes HEIGHT-bound (the
+   square board is capped by 100dvh minus the title/padding, with width to
+   spare either side), so the side panels and buttons can grow into that spare
+   width without ever taking a pixel from the board. Do not lower this
+   threshold or raise --ui-scale at any tablet/phone breakpoint above without
+   re-verifying the board's size in a browser first. */
+@media (min-width: 1600px) {
+  :root {
+    --ui-scale: 1.25;
   }
 }
