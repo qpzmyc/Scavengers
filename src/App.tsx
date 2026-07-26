@@ -1244,6 +1244,7 @@ function App() {
           </div>
         }
         standings={state.mode === 'lastStanding' ? <Lives state={state} /> : <Leaderboard state={state} />}
+        standingsKind={state.mode === 'lastStanding' ? 'lives' : 'leaderboard'}
         scoreStrip={
           <ScoreStrip
             state={state}

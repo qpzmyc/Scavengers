@@ -4,6 +4,14 @@ interface GameLayoutProps {
   title: ReactNode;
   /** Leaderboard (deathmatch) or Lives (survival). Hidden under the phone breakpoint. */
   standings: ReactNode;
+  /**
+   * Which card `standings` is, so CSS can reserve the right width for it. The
+   * two are very different sizes (the deathmatch leaderboard is ~444px, the
+   * survival lives card ~240px) and src/index.css has to know which one is on
+   * screen to work out how much width the board can claim. Reserving the larger
+   * one unconditionally cost the board ~200px in survival.
+   */
+  standingsKind: 'leaderboard' | 'lives';
   /** Compact per-player score line. Shown only under the phone breakpoint. */
   scoreStrip: ReactNode;
   /** ResourceBars, or the replay banner that replaces it. */
@@ -22,6 +30,7 @@ interface GameLayoutProps {
 export function GameLayout({
   title,
   standings,
+  standingsKind,
   scoreStrip,
   bars,
   board,
@@ -31,7 +40,7 @@ export function GameLayout({
   killsFeed,
 }: GameLayoutProps) {
   return (
-    <div className="game-layout">
+    <div className="game-layout" data-standings={standingsKind}>
       <div className="game-layout__title">{title}</div>
       <div className="game-layout__standings">{standings}</div>
       <div className="game-layout__strip">{scoreStrip}</div>

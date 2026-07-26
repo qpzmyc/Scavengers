@@ -966,6 +966,7 @@ export function OnlineGame({
         standings={
           state.mode === 'lastStanding' ? <Lives state={state} displayName={nameFor} /> : <Leaderboard state={state} displayName={nameFor} />
         }
+        standingsKind={state.mode === 'lastStanding' ? 'lives' : 'leaderboard'}
         scoreStrip={
           <ScoreStrip
             state={state}

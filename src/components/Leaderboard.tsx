@@ -10,7 +10,7 @@ interface LeaderboardProps {
 
 // Row height so rows can be absolutely positioned and slide (transform) between
 // ranks when the sort order changes. The actual pixel value lives in the
-// `--lb-row-h` custom property (src/index.css, scaled by `--ui-scale`) — the
+// `--lb-row-h` custom property (src/index.css, scaled by `--ui-unit`) — the
 // height/transform below read it via `calc()` so `rank` and `ids.length` stay
 // the only JS-supplied numbers. The `42px` here is only the `var()` fallback,
 // used if the stylesheet is ever missing; keep it equal to index.css's default.

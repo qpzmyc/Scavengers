@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import type { CSSProperties, ReactNode } from 'react';
 import type { GameState } from '../engine';
 import { theme } from '../theme';
 
@@ -22,59 +22,89 @@ export function ScoreStrip({ state, onOpenStandings, onOpenKills, lastKill }: Sc
   const showScore = state.mode === 'deathmatch';
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 4, background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: theme.radius, padding: '8px 10px' }}>
-      <span style={{ fontSize: 10, fontWeight: 600, color: theme.textMuted, textTransform: 'uppercase', letterSpacing: 0.4 }}>
-        Leaderboard
-      </span>
-      {/* Own row, full strip width. Sharing this row with the kill tracker (the
-          old layout) is what squeezed 4 players out of a real 375px phone;
-          the tracker now gets its own row below. */}
-      <button
-        onClick={onOpenStandings}
-        aria-label="Open standings"
-        style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', minWidth: 0, overflowX: 'auto', background: 'none', border: 'none', padding: 0 }}
-      >
-        {state.turnOrder.map((id) => {
-          const p = state.players[id];
-          const remaining = Math.max(0, state.deathCap - p.deaths);
-          return (
-            <span key={id} style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0, opacity: p.eliminated ? 0.4 : 1 }}>
-              <span style={{ width: 10, height: 10, borderRadius: '50%', background: p.color, display: 'inline-block' }} />
-              {showScore ? (
-                <span style={{ fontSize: 14, fontWeight: 600, fontVariantNumeric: 'tabular-nums', color: theme.text }}>
-                  {p.score}
-                </span>
-              ) : (
-                <span style={{ display: 'flex', alignItems: 'center', gap: 2, fontSize: 13 }}>
-                  <span style={{ fontWeight: 600, fontVariantNumeric: 'tabular-nums', color: theme.text }}>
-                    {remaining}×
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <div style={card}>
+        <span style={cardLabel}>Leaderboard</span>
+        {/* Own row, full strip width. Sharing this row with the kill tracker (the
+            old layout) is what squeezed 4 players out of a real 375px phone;
+            the tracker now lives in its own card below.
+
+            Styled as a real button (the stylesheet's border, surface and
+            padding) to match the kill tracker below it. It used to strip all
+            three off, which left the only tappable thing in the card looking
+            like plain text. The 20px of horizontal padding this adds still
+            leaves room for 4 players: their row needs ~214px of the 323px
+            available inside a 375px phone. */}
+        <button
+          onClick={onOpenStandings}
+          aria-label="Open standings"
+          style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', minWidth: 0, overflowX: 'auto', padding: '4px 10px' }}
+        >
+          {state.turnOrder.map((id) => {
+            const p = state.players[id];
+            const remaining = Math.max(0, state.deathCap - p.deaths);
+            return (
+              <span key={id} style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0, opacity: p.eliminated ? 0.4 : 1 }}>
+                <span style={{ width: 10, height: 10, borderRadius: '50%', background: p.color, display: 'inline-block' }} />
+                {showScore ? (
+                  <span style={{ fontSize: 14, fontWeight: 600, fontVariantNumeric: 'tabular-nums', color: theme.text }}>
+                    {p.score}
                   </span>
-                  <span style={{ fontSize: 12, lineHeight: 1, color: p.color }}>♥</span>
-                </span>
-              )}
-            </span>
-          );
-        })}
-      </button>
-      {/* Kill tracker's own row: it needed to give up the player row's width, and
-          in exchange it now gets the whole 343px before its ellipsis kicks in —
-          useful since real kill text ("GREEN shot BLUE") runs much longer than
-          "No kills yet". */}
-      <button
-        onClick={onOpenKills}
-        aria-label="Open kills feed"
-        style={{
-          width: '100%',
-          minWidth: 0,
-          fontSize: 12,
-          padding: '4px 10px',
-          overflow: 'hidden',
-          textOverflow: 'ellipsis',
-          whiteSpace: 'nowrap',
-        }}
-      >
-        {lastKill ?? 'No kills yet'}
-      </button>
+                ) : (
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 2, fontSize: 13 }}>
+                    <span style={{ fontWeight: 600, fontVariantNumeric: 'tabular-nums', color: theme.text }}>
+                      {remaining}×
+                    </span>
+                    <span style={{ fontSize: 12, lineHeight: 1, color: p.color }}>♥</span>
+                  </span>
+                )}
+              </span>
+            );
+          })}
+        </button>
+      </div>
+      {/* The kill tracker is its own card rather than a second row inside the
+          leaderboard's: they're two unrelated readings (who's winning vs. what
+          just happened), and sharing one bordered box read as if the kill text
+          were part of the standings. It still gets the full strip width before
+          its ellipsis kicks in — real kill text ("GREEN shot BLUE") runs much
+          longer than "No kills yet". */}
+      <div style={card}>
+        <span style={cardLabel}>Kills</span>
+        <button
+          onClick={onOpenKills}
+          aria-label="Open kills feed"
+          style={{
+            width: '100%',
+            minWidth: 0,
+            fontSize: 12,
+            padding: '4px 10px',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          {lastKill ?? 'No kills yet'}
+        </button>
+      </div>
     </div>
   );
 }
+
+const card: CSSProperties = {
+  display: 'flex',
+  flexDirection: 'column',
+  gap: 4,
+  background: theme.surface,
+  border: `1px solid ${theme.border}`,
+  borderRadius: theme.radius,
+  padding: '8px 10px',
+};
+
+const cardLabel: CSSProperties = {
+  fontSize: 10,
+  fontWeight: 600,
+  color: theme.textMuted,
+  textTransform: 'uppercase',
+  letterSpacing: 0.4,
+};

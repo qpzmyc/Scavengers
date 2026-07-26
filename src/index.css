@@ -7,68 +7,70 @@
   --border: #2c3441;
   --accent: #5b8cff;
 
-  /* Grows the side panels (leaderboard, kills, action buttons) and their text to
-     fill space the board was never going to use. Only ever raised at a width
-     where measurement showed the board is HEIGHT-bound rather than WIDTH-bound
-     (see the >= 1600px media query far below and the .game-layout comment) — at
-     every narrower size it stays 1, so panels are pixel-identical to before this
-     was added. Never lower the threshold or add a rise at tablet/phone sizes:
-     the board's square shape means widening a side column at those sizes comes
-     directly out of the board's width. */
-  --ui-scale: 1;
+  /* Continuous size ramp for the two side panels (leaderboard, kills) and their
+     text. It is a LENGTH rather than a plain number, and that is deliberate:
+     CSS can't derive a unitless multiplier from `100vw` (dividing a length by a
+     length isn't reliably supported), but it CAN build a length that grows with
+     the viewport, and `calc(<number> * <length>)` is valid. So --ui-unit is
+     "1px times the scale factor" and every scaled value reads
+     `calc(N * var(--ui-unit))` instead of the `Npx * var(--ui-scale)` this
+     replaced.
 
-  --lb-name-col: calc(140px * var(--ui-scale));
-  --lb-metric-col: calc(68px * var(--ui-scale));
-  --lb-cell-pad: calc(10px * var(--ui-scale));
-  --lb-head-font: calc(12px * var(--ui-scale));
-  --lb-value-font: calc(16px * var(--ui-scale));
+     The ramp starts at 1600px because below that the centre board column is
+     WIDTH-bound — it's whatever's left once the side columns take their share,
+     so growing them would come straight out of the board. Measurement showed
+     that flips at 1600px: past that the square board is capped by 100dvh minus
+     the title and padding, with width to spare either side, so the panels grow
+     into space the board was never going to use. Below 1600px the clamp floors
+     at 1px, so every narrower size is pixel-identical to the un-ramped design.
+
+     0.000625 per px reaches 1.25x at 2000px and tops out at the 1.6x ceiling at
+     2560px. This ramp drives the leaderboard and the kills feed ONLY — the
+     action buttons take their size from the viewport's HEIGHT instead (see the
+     >= 1200px block far below). Do not lower the 1600px start or raise the
+     ceiling without re-checking the board's size in a browser first. */
+  --ui-unit: clamp(1px, calc(1px + (100vw - 1600px) * 0.000625), 1.6px);
+
+  --lb-name-col: calc(140 * var(--ui-unit));
+  --lb-metric-col: calc(68 * var(--ui-unit));
+  --lb-cell-pad: calc(10 * var(--ui-unit));
+  --lb-head-font: calc(12 * var(--ui-unit));
+  --lb-value-font: calc(16 * var(--ui-unit));
   /* Row height for Leaderboard.tsx's absolutely-positioned, rank-animated rows.
      JS only ever multiplies this by `rank`/`ids.length` inside calc() — the
      actual pixel value lives here so it scales with everything else. */
-  --lb-row-h: calc(42px * var(--ui-scale));
+  --lb-row-h: calc(42 * var(--ui-unit));
 
   /* Kills panel: notification row text and the card's own padding. */
-  --kills-font: calc(14px * var(--ui-scale));
-  --kills-pad: calc(16px * var(--ui-scale));
+  --kills-font: calc(14 * var(--ui-unit));
+  --kills-pad: calc(16 * var(--ui-unit));
 
-  /* Action button sizing (ControlPanel.tsx's sizedBtn). Bases reproduce exactly
-     what the old width-derived formulas gave at a 320px controls column
-     (today's default): fontSize = clamp(13, 320/18, 22) = 17.7778px,
-     paddingV = clamp(8, 320/26, 18) = 12.3077px, paddingH = clamp(10, 320/18, 24)
-     = 17.7778px — all three comfortably inside their old clamps, so writing them
-     as the unclamped division reproduces today's look exactly. Multiplying all
-     three by the same --ui-scale keeps their proportions locked together as they
-     grow, instead of the old per-property clamps that let padding cap out while
-     the button kept widening. */
-  --btn-font: calc(320px / 18 * var(--ui-scale));
-  --btn-pad-v: calc(320px / 26 * var(--ui-scale));
-  --btn-pad-h: calc(320px / 18 * var(--ui-scale));
+  /* Action button sizing for the TABLET and PHONE arrangements only. Widescreen
+     replaces all three from the viewport height (see the >= 1200px block below).
+     These are the values the buttons already had, so tablet and phone are
+     untouched by the widescreen system. */
+  --btn-font: 17.78px;
+  --btn-pad-v: 12.31px;
+  --btn-pad-h: 17.78px;
 
-  /* Every other px length in ControlPanel.tsx that contributes to the panel's
-     or a button's box size, so the button keeps the exact same proportions as
-     --btn-font/--btn-pad-v/-h grow it (see sizedBtn's comment above — the old
-     bug was these staying fixed while font/padding scaled, drifting the
-     aspect ratio). Bases are today's literal pixel values, so at --ui-scale:1
-     every one of these calc()s reduces to the same number the component used
-     to hardcode — pixel-identical to before this was added.
-     --btn-radius scales too (a radius that stays fixed on a much bigger
-     button reads as too-sharp a corner); border-width is deliberately left
-     out of this list and stays a flat 1px — a hairline that thickens with
-     scale looks heavy. */
-  --panel-pad: calc(16px * var(--ui-scale));
-  --title-font: calc(20px * var(--ui-scale));
-  --title-mb: calc(6px * var(--ui-scale));
-  --hint-font: calc(13px * var(--ui-scale));
-  --hint-mt: calc(4px * var(--ui-scale));
-  --hint-mb: calc(12px * var(--ui-scale));
-  --row-gap: calc(8px * var(--ui-scale));
-  --row-mt: calc(6px * var(--ui-scale));
-  --badge-gap: calc(9px * var(--ui-scale));
-  --badge-mt: calc(4px * var(--ui-scale));
-  --badge-font: calc(11px * var(--ui-scale));
-  --badge-item-gap: calc(3px * var(--ui-scale));
-  --dot-size: calc(8px * var(--ui-scale));
-  --btn-radius: calc(8px * var(--ui-scale));
+  /* The control panel's own chrome — everything in the column that isn't a
+     button. Deliberately FIXED rather than ramped: the widescreen button height
+     is `(viewport height - a constant) / 5`, and that constant is only correct
+     if none of these move with viewport width. */
+  --panel-pad: 16px;
+  --title-font: 20px;
+  --title-mb: 6px;
+  --hint-font: 13px;
+  --hint-mt: 4px;
+  --hint-mb: 12px;
+  --row-gap: 8px;
+  --row-mt: 6px;
+  --badge-gap: 9px;
+  --badge-mt: 4px;
+  --badge-font: 11px;
+  --badge-item-gap: 3px;
+  --dot-size: 8px;
+  --btn-radius: 8px;
 
   color-scheme: dark;
   font-family: system-ui, 'Segoe UI', Roboto, sans-serif;
@@ -250,26 +252,53 @@ button:disabled {
      `.game-layout__controls` keyed to a 380px width threshold, back when the
      desktop controls column was a fixed 320px — any arrangement narrower than
      380px got columns, anything wider got rows, and each arrangement happened
-     to land on a distinctive enough width that this worked. Once `--ui-scale`
-     started scaling that same 320px column (see the >= 1600px media query far
-     below), the desktop column itself could cross 380px while remaining the
-     same narrow "stack these buttons" arrangement it always was — a width
-     threshold can't tell "narrow desktop column, now scaled up" apart from
-     "wide tablet strip that was always meant to be a row." Setting this
-     explicitly per arrangement (desktop here; tablet/phone in their own media
-     queries below) is the only way to keep that distinction as --ui-scale (or
-     the column width) changes. Desktop's is `column` — the controls are a
-     narrow right-hand column at every --ui-scale value. */
+     to land on a distinctive enough width that this worked. Once that 320px
+     column started being computed instead of fixed, the desktop column itself
+     could cross 380px while remaining the same narrow "stack these buttons"
+     arrangement it always was — a width threshold can't tell "narrow desktop
+     column, now larger" apart from "wide tablet strip that was always meant to
+     be a row." Setting this explicitly per arrangement (desktop here;
+     tablet/phone in their own media queries below) is the only way to keep that
+     distinction as the column width changes. That matters more than ever now
+     that the width is derived from the viewport's height (see --controls-col
+     below), which can put it almost anywhere. Desktop's is `column` — the
+     controls are a narrow right-hand column at every size. */
   --controls-dir: column;
-  /* The controls column is a fixed 320px (scaled by --ui-scale), not `auto` or a
-     fraction. ControlPanel's buttons take their font size and padding from CSS
-     custom properties (--btn-font/--btn-pad-v/--btn-pad-h in :root, see
-     sizedBtn in ControlPanel.tsx), so an `auto` column would size itself to
-     content that is itself sized from the column — the same kind of
-     self-referential feedback loop the board wrapper's comment below warns
-     about, just running through the grid track instead of flexbox. */
-  grid-template-columns: auto minmax(0, 1fr) calc(320px * var(--ui-scale));
-  grid-template-rows: auto minmax(0, 1fr) minmax(0, 1fr);
+  /* The controls column is a definite width, never `auto` or a fraction.
+     ControlPanel's buttons take their size from CSS custom properties, so an
+     `auto` column would size itself to content that is itself sized from the
+     column — the same self-referential feedback loop the board wrapper's
+     comment below warns about, just running through the grid track instead of
+     flexbox. --controls-col is set from the viewport HEIGHT in the >= 1200px
+     block below (button width is 1.5x button height, and button height comes
+     from how much vertical room the column has); the 320px fallback is what
+     the column was before that, and applies only if that block doesn't match.
+     Deriving width from height rather than width is what keeps it loop-free —
+     the grid's row heights come from the viewport, never from this track. */
+  /* The BOARD outranks the buttons when the two compete for width. The centre
+     track carries a definite minimum (--board-target, the exact square the
+     board can draw at this viewport height) and the controls track is
+     `minmax(--controls-min, --controls-col)`, so when everything can't fit at
+     once the grid takes the difference out of the controls column rather than
+     the board. Buttons hold their 1.5:1 shape while that happens by getting
+     shorter with the narrower column (aspect-ratio, see the >= 1200px block),
+     which leaves more empty space below them. Before this, the controls track
+     was a single definite width, so it was sized first and the board — a plain
+     `1fr` — silently absorbed every shortfall: in deathmatch at 1440x900 the
+     board sat at 661px WIDTH-bound while the buttons took their full 239px. */
+  grid-template-columns:
+    auto
+    minmax(var(--board-target, 0px), 1fr)
+    minmax(var(--controls-min, 0px), var(--controls-col, 320px));
+  /* Row 2 is `minmax(0, auto)` so the standings card takes its natural height
+     and the kills feed (row 3) starts directly underneath it rather than
+     halfway down the screen, which is what two `1fr` rows gave. The `0`
+     minimum still lets row 2 shrink on a short viewport instead of pushing
+     kills off-screen — `.game-layout__standings` scrolls internally when that
+     happens. Row 3 keeps `minmax(0, 1fr)` so the kills feed absorbs the rest
+     of the column and scrolls inside itself; see the note on the side-panel
+     rows below for why an `auto` row there would clip instead. */
+  grid-template-rows: auto minmax(0, auto) minmax(0, 1fr);
   grid-template-areas:
     'title title  title'
     'stand center controls'
@@ -311,6 +340,15 @@ button:disabled {
   display: flex;
   gap: 8px;
   margin-top: 6px;
+}
+
+/* Buttons share the row equally. This lives here rather than in sizedBtn's
+   inline style so the widescreen block below can override it — an inline
+   `flex: 1` would win over any stylesheet rule, and widescreen needs explicit
+   per-button heights instead of flex distributing the row's height. */
+.control-row > button {
+  flex: 1;
+  min-width: 0;
 }
 
 .game-layout__center {
@@ -382,13 +420,22 @@ button:disabled {
    sized the way it is. */
 @media (min-width: 768px) and (max-width: 1199px) and (orientation: portrait) {
   .game-layout {
-    grid-template-columns: auto minmax(0, 1fr); /* Standings takes natural width (~444px), kills absorbs remainder */
+    /* Both cards take their natural width and a third, empty spacer track eats
+       whatever is left over. Kills used to be `minmax(0, 1fr)` here, which made
+       it absorb the remainder — on an 820px tablet that stretched a card
+       holding one line of text to ~516px for no reason. The rows that span the
+       full width (title, centre, controls) span all three tracks, so the spacer
+       costs them nothing. Equal columns were the other option and were rejected:
+       half of an 820px row is ~382px, and the deathmatch leaderboard needs
+       ~444px for its fixed score columns, so it would have gained an internal
+       horizontal scroll. */
+    grid-template-columns: auto auto minmax(0, 1fr);
     grid-template-rows: auto minmax(0, 1fr) auto minmax(auto, 340px);
     grid-template-areas:
-      'title    title'
-      'center   center'
-      'controls controls'
-      'stand    kills';
+      'title    title    title'
+      'center   center   center'
+      'controls controls controls'
+      'stand    kills    .';
     /* Controls span both columns here too — wide, so buttons go side by side. */
     --controls-dir: row;
   }
@@ -422,6 +469,24 @@ button:disabled {
      below (kills is a modal there, not a grid row). */
   .game-layout__kills {
     max-height: 100%;
+  }
+
+  /* Side by side, the two cards should read as one band, so they match heights
+     here rather than each taking its own. This is scoped to portrait on
+     purpose: everywhere else the kills card is BELOW the standings card and
+     should hug its content, growing downward as kills come in (see the note on
+     the desktop rows). `min-height` rather than `height` so a long feed can
+     still grow past the row and scroll inside the wrapper's `overflow-y`. */
+  .game-layout__standings > *,
+  .game-layout__kills > * {
+    min-height: 100%;
+  }
+
+  /* Without a cap the `auto` kills track sizes to the max-content width of the
+     longest kill line, which a name-heavy line can push well past the
+     leaderboard. */
+  .game-layout__kills > * {
+    max-width: 380px;
   }
 }
 
@@ -498,17 +563,146 @@ button:disabled {
   }
 }
 
-/* --ui-scale only rises here. At 1200-1599px the centre board column is still
-   WIDTH-bound — it's whatever's left after the side columns take their fixed
-   share, so growing those columns would shrink the board. Measurement showed
-   that flips at 1600px: past that width the board becomes HEIGHT-bound (the
-   square board is capped by 100dvh minus the title/padding, with width to
-   spare either side), so the side panels and buttons can grow into that spare
-   width without ever taking a pixel from the board. Do not lower this
-   threshold or raise --ui-scale at any tablet/phone breakpoint above without
-   re-verifying the board's size in a browser first. */
-@media (min-width: 1600px) {
+/* Widescreen only: the action buttons take their size from how much VERTICAL
+   room the controls column has, and the column's width follows from that. Gated
+   on height as well as width — a short, wide viewport (a landscape phone at
+   900x420) falls into the single-column, page-scrolling arrangement above,
+   which has no full-height column to divide up.
+
+   One "slot" is the height of one action button. The available height is
+   divided by FIVE, not four, deliberately: the four action buttons should take
+   MOST of the column's height but not all of it, so the fifth slot stays empty
+   instead of the block running edge to edge.
+
+   --controls-chrome is everything in the column that isn't a button: the grid's
+   own 24px top and bottom padding (48), the title row (a 26px h1 at line-height
+   1.45, ~38), the 24px grid gap beneath it, the panel card's 1px top and bottom
+   border (2), the panel's 16px padding top and bottom (32), the panel's own
+   title (20px at 1.45, ~29) plus its 6px bottom margin, the row's 6px top
+   margin, and the four 8px gaps between the five slots (32) — 217px.
+
+   It is a constant rather than a measurement, and that is what keeps the whole
+   thing loop-free: slot height depends only on the viewport's height, so the
+   column's width — derived from it — can never feed back into it. Every length
+   in that list is a fixed :root value for exactly this reason; if you make any
+   of them scale with viewport width again, this constant stops being true. */
+@media (min-width: 1200px) and (min-height: 551px) {
   :root {
-    --ui-scale: 1.25;
+    --controls-chrome: 217px;
+    /* The height one action button gets when width is NOT the constraint — the
+       column's ideal, which the board is allowed to cut into. */
+    --btn-slot: calc((100dvh - var(--controls-chrome)) / 5);
+    /* A button is the slot at 1.5:1, held between a ceiling and a floor. The
+       34px both add on top (2 * --panel-pad + the card's 2px border) is the
+       difference between a button's width and the column's.
+
+       Ceiling, 260px: without one the width tracks screen height forever and
+       reaches 367px on a 1440px-tall screen, far more than the label needs. A
+       1080px-tall screen lands almost exactly on the cap, so only taller screens
+       are affected; past it the buttons stop growing and the spare height stays
+       empty below them rather than inflating them further.
+
+       Floor, 170px: where the column stops handing width back to the board.
+       Every pixel of this floor is a pixel the board cannot have in a tight
+       window, since --board-target below subtracts it — so it is a deliberate
+       trade for legible buttons, not a safety margin. */
+    --controls-col: calc(min(var(--btn-slot) * 1.5, 260px) + 2 * var(--panel-pad) + 2px);
+    --controls-min: calc(170px + 2 * var(--panel-pad) + 2px);
+
+    /* Everything above and below the board inside the centre column adds up to
+       239px: the grid's 48px of vertical padding, the ~38px title row, the 24px
+       grid gap, the 103px resource bars, their 16px gap, and the board wrapper's
+       own ~10px. Measured at 1440x900, where a 900px viewport yields exactly a
+       661px board. */
+    --board-chrome: 239px;
+
+    /* The height is implied by the width now (aspect-ratio below) and the button
+       centres its own content, so vertical padding would only fight the
+       centring. */
+    --btn-pad-v: 0px;
+  }
+
+  /* --board-target is the square the board is allowed to demand, and it lives on
+     .game-layout rather than :root because it reads --stand-reserve, which is
+     set per mode on that same element (a :root declaration can't see a value
+     defined on a descendant).
+
+     The second term is a safety cap: without it, a tall narrow window would have
+     the board demand a square that cannot fit beside the other two columns and
+     push the whole grid into overflow, which `overflow: hidden` would then clip.
+     It subtracts only what genuinely has to be there — the grid's padding and
+     gaps (96px), the standings card, and the controls column's floor.
+
+     --stand-reserve MUST match the standings card actually on screen. It used to
+     be a flat 444px, the deathmatch leaderboard's width, which meant survival
+     (a 240px lives card) reserved ~200px that nothing was using. The board hit
+     that phantom cap and stopped growing while the controls column kept its full
+     ideal width, which is exactly the "panel wins over the board" the whole
+     minmax arrangement above was meant to prevent. The 240px floor is not the
+     lives card's own width but the kills card's `minWidth: 240`, since the two
+     share this column and the wider one sizes the track. */
+  .game-layout {
+    --stand-reserve: 240px;
+    --board-target: min(
+      calc(100dvh - var(--board-chrome)),
+      calc(100vw - 96px - var(--stand-reserve) - var(--controls-min))
+    );
+  }
+
+  /* Built from the very tokens the Leaderboard's grid uses (name column, four
+     metric columns, and the card's own 16px padding either side) so it tracks
+     --ui-unit automatically instead of being a number that silently goes stale. */
+  .game-layout[data-standings='leaderboard'] {
+    --stand-reserve: max(240px, calc(var(--lb-name-col) + 4 * var(--lb-metric-col) + 32px));
+  }
+
+  /* The standings column has to keep its intrinsic width, or giving the board a
+     hard minimum just moves the squeeze onto the leaderboard instead of the
+     buttons. `.game-layout__standings` sets `overflow-y: auto`, which makes it a
+     scroll container, and a scroll container's automatic minimum size is ZERO —
+     so the `auto` track was free to shrink under the card and clip it, which is
+     exactly what happened at 1366x900 with a deathmatch-width leaderboard.
+     Naming the minimum explicitly overrides that automatic zero while leaving
+     the vertical scrolling it was added for intact. The controls column is then
+     the only track that can yield, which is the intent. */
+  .game-layout__standings {
+    min-width: min-content;
+  }
+
+  /* Makes the column a query container so label size and side padding can come
+     from the width the column ACTUALLY got rather than the width it asked for.
+     They used to be derived from --btn-slot, which is the ideal; once the board
+     started taking width back, a button could end up shorter while its label
+     stayed sized for the wider column it didn't get. */
+  .game-layout__controls {
+    container-type: inline-size;
+  }
+
+  /* Declared on the row, not on :root and not on the container itself: `cqw`
+     resolves against the nearest ANCESTOR container, so it has to be used by an
+     element inside .game-layout__controls. The 34px is the panel's padding and
+     border, i.e. the gap between the column's width and a button's. */
+  .control-row {
+    --btn-font: calc((100cqw - 34px) * 0.1067);
+    --btn-pad-h: calc((100cqw - 34px) * 0.08);
+  }
+
+  /* aspect-ratio rather than an explicit height, so the 1.5:1 shape survives the
+     column being narrowed to protect the board: the width comes from the column
+     and the height follows it down. `flex: 0 0 auto` because `flex: 1` in a flex
+     COLUMN hands the row's height back to the buttons and undoes all of this. */
+  .control-row > button {
+    flex: 0 0 auto;
+    width: 100%;
+    /* Nav buttons stand 30% shorter than a full slot at the same width, which is
+       the width divided by 1.5 and then by 0.7. */
+    aspect-ratio: calc(1.5 / 0.7);
+  }
+
+  /* The four action buttons and the three weapon buttons get the full slot; the
+     shorter ratio above is the default because every other row in the panel is a
+     Back / Next / Skip / Cancel / Confirm pair. */
+  .control-row[data-action='true'] > button {
+    aspect-ratio: 1.5;
   }
 }

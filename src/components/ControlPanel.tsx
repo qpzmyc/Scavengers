@@ -21,9 +21,9 @@ interface CostItem {
 }
 const DOT_COLOR: Record<CostKind, string> = { energy: theme.energy, ammo: theme.ammo };
 
-// The literal fallbacks below match index.css's `:root` values at
-// --ui-scale: 1 — only used if the stylesheet is ever missing, same pattern
-// as sizedBtn's fallbacks further down.
+// The literal fallbacks below match index.css's `:root` values — only used if
+// the stylesheet is ever missing, same pattern as sizedBtn's fallbacks further
+// down.
 function CostBadge({ items }: { items: CostItem[] }) {
   return (
     <span style={{ display: 'flex', gap: 'var(--badge-gap, 9px)', alignItems: 'center', marginTop: 'var(--badge-mt, 4px)', fontSize: 'var(--badge-font, 11px)', fontWeight: 700 }}>
@@ -113,7 +113,7 @@ const baseBtn: React.CSSProperties = {
 // decided by `--controls-dir`, set once per layout arrangement in
 // src/index.css (see the comment on `.game-layout`) rather than derived from
 // this element's measured width — width alone can't tell a narrow desktop
-// column (which grows with --ui-scale) apart from a wide tablet strip.
+// column (whose width is computed, not fixed) apart from a wide tablet strip.
 const rowStyle: React.CSSProperties = {
   display: 'flex',
   gap: 'var(--row-gap, 8px)',
@@ -121,14 +121,23 @@ const rowStyle: React.CSSProperties = {
   flexDirection: 'var(--controls-dir, column)' as React.CSSProperties['flexDirection'],
 };
 
-// The literal fallbacks below (17.78px etc.) match index.css's `:root` values
-// at --ui-scale: 1 (320px / 18 and 320px / 26) — only used if the stylesheet
-// is ever missing, same pattern as Leaderboard.tsx's `var()` fallbacks.
+// The literal fallbacks below (17.78px etc.) match index.css's `:root` values —
+// only used if the stylesheet is ever missing, same pattern as
+// Leaderboard.tsx's `var()` fallbacks.
+//
+// Two things are deliberately NOT here. `flex: 1` lives in index.css's
+// `.control-row > button` rule instead, because an inline style would win over
+// any stylesheet rule and the widescreen arrangement has to replace it with
+// explicit per-button heights. Height itself is likewise CSS-only, for the same
+// reason. What stays inline is the centring: with an explicit height the label
+// would otherwise sit against the top edge.
 function sizedBtn(variant: Variant, disabled: boolean, active: boolean): React.CSSProperties {
   return {
     ...btn(variant, disabled, active),
-    flex: 1,
     margin: 0,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
     fontSize: 'var(--btn-font, 17.78px)',
     padding: 'var(--btn-pad-v, 12.31px) var(--btn-pad-h, 17.78px)',
   };
@@ -152,8 +161,8 @@ function btn(variant: Variant, disabled: boolean, active = false): React.CSSProp
   return { ...baseBtn, background: theme.surface, border: `1px solid ${theme.border}`, color: theme.text };
 }
 
-// Fallbacks here match index.css's `:root` values at --ui-scale: 1, same
-// pattern as sizedBtn's — only used if the stylesheet is ever missing.
+// Fallbacks here match index.css's `:root` values, same pattern as sizedBtn's —
+// only used if the stylesheet is ever missing.
 const wrap: React.CSSProperties = { padding: 'var(--panel-pad, 16px)' };
 const title: React.CSSProperties = { fontWeight: 800, fontSize: 'var(--title-font, 20px)', letterSpacing: 0.2, marginBottom: 'var(--title-mb, 6px)', color: theme.heading };
 const hint: React.CSSProperties = { margin: 'var(--hint-mt, 4px) 0 var(--hint-mb, 12px)', color: theme.textMuted, fontSize: 'var(--hint-font, 13px)' };
@@ -180,7 +189,7 @@ export function ControlPanel({
     return (
       <div style={wrap} data-testid="control-panel">
         <div style={title}>Choose an action</div>
-        <div style={rowStyle} className="control-row">
+        <div style={rowStyle} className="control-row" data-action="true">
           {/* Never HTML-disabled: clicking while unaffordable is handled by the
               caller, which shows a "not enough X" toast instead of doing nothing. */}
           <button style={{ ...sizedBtn('secondary', !can.move, false), ...costCol }} onClick={() => onSelectAction('move')}><span>Move</span><CostBadge items={COST.move} /></button>
@@ -251,7 +260,7 @@ export function ControlPanel({
     return (
       <div style={wrap} data-testid="control-panel">
         <div style={title}>Attack — choose a weapon</div>
-        <div style={rowStyle} className="control-row">
+        <div style={rowStyle} className="control-row" data-action="true">
           {/* Always the same (non-greyed) style, regardless of affordability — the
               toast notification is the feedback mechanism now, not a dimmed button. */}
           <button style={{ ...sizedBtn('toggle', false, flow.type === 'punch'), ...costCol }} onClick={() => onSelectAttackType('punch')}><span>Fist</span><CostBadge items={COST.punch} /></button>
