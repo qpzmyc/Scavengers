@@ -30,6 +30,13 @@ export interface LocalSave {
   turnStart: Record<PlayerId, GameState>;
   pendingLog: Record<PlayerId, AnimFrame[]>;
   replay: AnimFrame[];
+  // Frames of the CURRENT actor's turn so far, not yet flushed into the other players'
+  // pendingLog (that flush only happens when the turn actually ends). A kill grants an
+  // extra turn, so a streak is saved several times mid-turn with frames already banked
+  // here — without persisting them, resuming loses every kill in the streak from what
+  // the other players get to replay. Optional so v1 saves written before this existed
+  // still load; they simply resume with nothing banked, exactly as they did before.
+  actorLog?: AnimFrame[];
 }
 
 const KEY = 'scavengers.localGame.v1';

@@ -215,6 +215,7 @@ function App() {
       turnStart: turnStartRef.current,
       pendingLog: pendingLogRef.current,
       replay: replayRef.current,
+      actorLog: actorLogRef.current,
     });
   };
 
@@ -228,7 +229,10 @@ function App() {
     setNotifications(save.notifications);
     notificationsRef.current = save.notifications;
     notificationIdRef.current = save.notificationId;
-    actorLogRef.current = [];
+    // Restore the in-progress turn's banked frames (non-empty only when the save was
+    // taken mid-kill-streak), so when that actor finally ends their turn the whole
+    // streak reaches the other players' replays — not just the part played after resume.
+    actorLogRef.current = save.actorLog ?? [];
     turnStartRef.current = save.turnStart;
     pendingLogRef.current = save.pendingLog;
     replayRef.current = save.replay;
