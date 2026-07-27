@@ -22,7 +22,11 @@ export function ScoreStrip({ state, onOpenStandings, onOpenKills, lastKill }: Sc
   const showScore = state.mode === 'deathmatch';
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+    // Stacked by default. Narrow-landscape puts the strip in a full-width row
+    // where there is space to sit the two cards side by side, and halving the
+    // strip's height there is what lets the board clear its minimum tile size
+    // (see the 768-847px block in src/index.css).
+    <div style={{ display: 'flex', flexDirection: 'var(--strip-dir, column)' as CSSProperties['flexDirection'], gap: 8 }}>
       <div style={card}>
         <span style={cardLabel}>Leaderboard</span>
         {/* Own row, full strip width. Sharing this row with the kill tracker (the

@@ -371,30 +371,20 @@ button:disabled {
   justify-content: center;
 }
 
-@media (max-width: 1199px) {
-  .game-layout {
-    /* Rows 2 and 4 (standings, controls) are bounded content — at most 4
-       players, at most a handful of buttons — so they get `auto` and are
-       shown in full at their natural height. Making them `1fr` split the
-       flexible space three ways and starved the standings row, forcing a
-       4-player leaderboard into its own internal scrollbar. Row 3 (kills)
-       is unbounded (a growing feed), so it keeps `minmax(0, 1fr)`: it
-       absorbs the leftover space and scrolls internally via its own
-       `min-height: 0; overflow-y: auto` rather than forcing the grid to
-       clip (see the sibling lesson on side-panel rows below). Do not
-       change rows 2 or 4 back to `1fr` — that reintroduces the regression. */
-    grid-template-columns: auto minmax(0, 1fr);
-    grid-template-rows: auto auto minmax(0, 1fr) auto;
-    grid-template-areas:
-      'title title'
-      'stand center'
-      'kills center'
-      '.     controls';
-    /* Controls sit under the board, spanning the centre column — wide, so
-       buttons go side by side. */
-    --controls-dir: row;
-  }
-}
+/* Landscape tablets have no block of their own: they fall through to the
+   desktop arrangement at the top of this file, which is what the shape wants.
+   They used to get a two-column layout (standings and kills stacked left, board
+   centre, controls in a wide strip beneath the board). Measured on a 1180x820
+   iPad, the desktop three-column arrangement gives the board 581px against that
+   layout's 429px, because the controls move out of the vertical stack and into
+   a column beside the board. The >= 768px button block at the bottom of this
+   file covers them too, so the buttons are sized from viewport height there in
+   exactly the same way.
+
+   Portrait tablets do NOT fall through — see the block immediately below. The
+   same measurement in portrait goes the other way: 280px against 429px, and
+   worse in deathmatch, because a 444px-wide leaderboard beside the board leaves
+   the centre column almost nothing. */
 
 /* Tablet PORTRAIT only (e.g. 820x1180 iPad). At portrait proportions the
    two-column tablet arrangement above squeezes the centre column so hard the
@@ -490,14 +480,74 @@ button:disabled {
   }
 }
 
-/* Also gated on height, not just width: a landscape phone (844x390, 926x428)
-   is wider than 767px but only a few hundred px tall, so without this it
-   falls into the tablet block above, which fixes the layout to 100dvh with
-   overflow hidden and no row that can scroll. This single-column arrangement
-   is page-scrollable, which is the only thing that works when height is
-   this tight — a landscape phone is wide but short, and the fixed-height
-   arrangements have nowhere to put the board. */
+/* Shared by BOTH phone orientations: the layouts differ (portrait scrolls in one
+   column, landscape gets its own three-column block near the bottom of this
+   file) but the squeeze on space is the same, so the sizing lives here where
+   both pick it up. */
 @media (max-width: 767px), (max-height: 550px) {
+  /* Vertical space is the scarce resource on a phone, and the panel chrome was
+     all still at desktop size. These come down to buy the board room: the
+     control panel's heading, and every text and box measurement in the resource
+     bars — roughly 30px back in total, which on a 375px portrait phone is 35px
+     less page scroll. The bars' pill radius follows the height automatically
+     (see ResourceBars.tsx), and the reserved label/value widths come down with
+     their font sizes so the bar itself keeps the room it gains. Landscape needs
+     this more than portrait, where 390px of height has to hold everything. */
+  :root {
+    --title-font: 15px;
+    --title-mb: 4px;
+
+    --bars-pad: 8px 10px;
+    --bars-gap: 6px;
+    --bars-row-gap: 8px;
+    --bars-height: 11px;
+    --bars-label-font: 10px;
+    --bars-label-w: 44px;
+    --bars-value-font: 11px;
+    --bars-value-w: 42px;
+    --bars-name-font: 13px;
+    --bars-turn-font: 10px;
+    --bars-dot: 10px;
+  }
+
+  /* Button text and padding scale with the room each button gets. Derived from
+     100vw rather than a container query because the controls span the viewport
+     in the portrait arrangement: the 66px is the grid's 16px padding either
+     side, the card's 1px borders and the panel's 16px padding either side, and
+     the rest is the 8px gaps between buttons.
+     Every value is clamped to the size it had when these were fixed, so the
+     formulas can only ever shrink text below today's look, never inflate it.
+     Landscape phones fall into the >= 768px block further down, which redefines
+     these from the controls column's own width — correct there, since the
+     column is 204px rather than the full viewport. */
+  .control-row {
+    /* Nav rows (Back / Next / Skip / Cancel / Confirm) hold two buttons. */
+    --btn-avail-w: calc((100vw - 66px - 8px) / 2);
+    --btn-font: clamp(10px, calc(var(--btn-avail-w) * 0.12), 17.78px);
+    --btn-pad-h: clamp(3px, calc(var(--btn-avail-w) * 0.04), 17.78px);
+  }
+
+  /* The four action buttons, and the three weapon buttons. Divided by four so
+     the weapon row errs on the safe side rather than overflowing. */
+  .control-row[data-action='true'] {
+    --btn-avail-w: calc((100vw - 66px - 24px) / 4);
+    --btn-font: clamp(10px, calc(var(--btn-avail-w) * 0.17), 17.78px);
+    --btn-pad-h: clamp(3px, calc(var(--btn-avail-w) * 0.05), 17.78px);
+    /* The cost badge has to come down with the label, or it competes with it. */
+    --badge-font: clamp(8px, calc(var(--btn-avail-w) * 0.13), 11px);
+    --badge-gap: clamp(3px, calc(var(--btn-avail-w) * 0.06), 9px);
+    --badge-item-gap: clamp(2px, calc(var(--btn-avail-w) * 0.03), 3px);
+    --dot-size: clamp(5px, calc(var(--btn-avail-w) * 0.08), 8px);
+  }
+}
+
+/* Portrait phone: a single page-scrolling column. Gated on width alone now.
+   It used to also catch `(max-height: 550px)` to sweep up landscape phones,
+   on the grounds that a fixed-height arrangement had nowhere to put the board
+   when height is that tight. Landscape now has a three-column block of its own
+   near the bottom of this file, which fits because the resource bars move out
+   of the centre column. */
+@media (max-width: 767px) {
   .game-layout {
     height: auto;
     min-height: 100dvh;
@@ -511,9 +561,13 @@ button:disabled {
       'strip'
       'center'
       'controls';
-    /* Narrow single column — four buttons in a row would be ~85px each at
-       375px wide. Stack for usability and touch targets. */
-    --controls-dir: column;
+    /* One row, matching the tablet arrangement. This used to stack, on the
+       grounds that four buttons across a 375px phone leaves only ~72px each and
+       the labels wouldn't fit — which was true at the shared 17.78px font. The
+       rules below size the text from the width actually available instead, so
+       "Fake Move" fits at the narrow end while wider phones (and landscape,
+       which this block also covers) keep the full-size text. */
+    --controls-dir: row;
   }
 
   .game-layout__standings,
@@ -586,7 +640,19 @@ button:disabled {
    column's width — derived from it — can never feed back into it. Every length
    in that list is a fixed :root value for exactly this reason; if you make any
    of them scale with viewport width again, this constant stops being true. */
-@media (min-width: 1200px) and (min-height: 551px) {
+/* Covers every arrangement whose controls are a COLUMN beside the board: all
+   desktop widths at any height, plus landscape tablets and landscape phones.
+   The only thing deliberately excluded is 768-1199px PORTRAIT, which puts the
+   controls in a wide strip under the board and must keep the flat sizing.
+
+   The height gate that used to be on the first arm was a bug: `>= 1200px wide
+   AND >= 551px tall` plus `768-1199px landscape` left a hole at >= 1200px wide
+   and <= 550px tall (a 1280x500 window). That range matched the landscape block
+   at the bottom of this file, which needs --controls-col, --controls-min,
+   --board-target and `container-type` from here — with none of them defined,
+   `100cqw` resolved against the viewport instead of the column and rendered
+   80px button text. Do not put a height bound back on the first arm. */
+@media (min-width: 1200px), (min-width: 768px) and (orientation: landscape) {
   :root {
     --controls-chrome: 217px;
     /* The height one action button gets when width is NOT the constraint — the
@@ -609,11 +675,16 @@ button:disabled {
     --controls-col: calc(min(var(--btn-slot) * 1.5, 260px) + 2 * var(--panel-pad) + 2px);
     --controls-min: calc(170px + 2 * var(--panel-pad) + 2px);
 
-    /* Everything above and below the board inside the centre column adds up to
-       239px: the grid's 48px of vertical padding, the ~38px title row, the 24px
-       grid gap, the 103px resource bars, their 16px gap, and the board wrapper's
-       own ~10px. Measured at 1440x900, where a 900px viewport yields exactly a
-       661px board. */
+    /* Everything above and below the board inside the centre column: the grid's
+       48px of vertical padding, the ~38px title row, the 24px grid gap, the 103px
+       resource bars and their 16px gap. That is 229px, and the remaining ~10px is
+       slack for the board rounding DOWN to a whole tile size — the point of this
+       constant is a centre-track minimum that matches the square actually drawn,
+       not the wrapper it is drawn in. Measured at 1440x900: the wrapper comes out
+       670.9px tall, so the board floors to 60px tiles and draws 660px, and
+       `900 - 239 = 661` tracks that within a pixel where `900 - 229 = 671` would
+       over-demand by eleven.
+       Re-derive this if the bars or the title change height. */
     --board-chrome: 239px;
 
     /* The height is implied by the width now (aspect-ratio below) and the button
@@ -704,5 +775,192 @@ button:disabled {
      Back / Next / Skip / Cancel / Confirm pair. */
   .control-row[data-action='true'] > button {
     aspect-ratio: 1.5;
+  }
+}
+
+/* Landscape phone (844x390, 926x428): wide and short, so it takes the desktop
+   three-column shape rather than portrait's scrolling single column — but with
+   the resource bars moved OUT of the centre column and placed under the
+   standings. That move is what makes it fit at all. Stacked in the centre the
+   way every other size does it, the title, the bars and their gaps leave the
+   board 161px, about 14.6px a tile, well under the 28px minimum where tiles
+   stop being tappable. With the bars aside, the centre column is nothing but
+   board and clears the minimum comfortably.
+
+   `display: contents` on the centre wrapper promotes the bars and the board to
+   grid items so each can be placed on its own; grid placement ignores DOM
+   order, so GameLayout.tsx renders one tree at every size.
+
+   Last in the file on purpose: it has to win over the >= 768px landscape block
+   above, which this viewport also matches.
+
+   Padding and gaps drop to 10px. At 390px tall, the 24px used elsewhere costs
+   48px of board height, which is nearly two tiles.
+
+   The second arm catches landscape that is too NARROW rather than too short.
+   The desktop arrangement needs `96px of padding and gaps + the standings card
+   + the 204px controls floor + the board's 308px minimum` to fit across. That
+   is 1052px with deathmatch's 444px leaderboard, so every landscape width below
+   it starved the centre column — and because boardCellSize clamps UP to
+   MIN_CELL_PX rather than shrinking, the board then rendered wider than its
+   track and painted over both side panels (measured 52px onto each at 900x600,
+   and 28px of overflow on a 1024x768 iPad). Collapsing to the strip and the
+   10px padding buys back well over 200px, which clears the minimum from 807px
+   upward; below that the block after this one drops the left column entirely. */
+@media (min-width: 768px) and (max-height: 550px),
+  (min-width: 768px) and (max-width: 1051px) and (orientation: landscape) {
+  .game-layout {
+    height: 100dvh;
+    overflow: hidden;
+    gap: 10px;
+    padding: 10px;
+    grid-template-columns:
+      auto
+      minmax(0, 1fr)
+      minmax(var(--controls-min, 0px), var(--controls-col, 320px));
+    grid-template-rows: auto auto auto minmax(0, 1fr);
+    grid-template-areas:
+      'title title  title'
+      'strip center controls'
+      'bars  center controls'
+      '.     center controls';
+    /* `row`, even though the controls are a narrow column here. The direction
+       drives .control-row's flex-direction, and the buttons need to flow
+       horizontally in order to WRAP into the 2x2 block set up at the bottom of
+       this block — under `column` they wrap into extra columns instead, which
+       just restacks them one per line at half width. */
+    --controls-dir: row;
+  }
+
+  /* The full standings and kills panels collapse to the compact score strip and
+     its two tap-to-open modals, exactly as portrait phone does. They do not fit
+     here: a 4-player lives card is 269px and the bars another 83px, against 322px
+     of column, so kills was being squeezed to zero height with no way to reach
+     it. The strip carries the same information in ~115px. */
+  .game-layout__standings,
+  .game-layout__kills {
+    display: none;
+  }
+
+  .game-layout__strip {
+    grid-area: strip;
+    display: block;
+  }
+
+  .game-layout__center {
+    display: contents;
+  }
+
+  /* ResourceBars carries an inline pixel width, measured from the BOARD column so
+     it lines up with the board everywhere else. In this arrangement it isn't in
+     the board's column any more, and that inline width dragged the standings
+     column out to 320px and pushed the board into overflow — worse, the width it
+     was being given came from a measurement of the column its own presence was
+     shrinking, which is a feedback loop.
+     !important is the only thing that beats an inline style here, and it has to
+     be `width`, not a flex override: this column is an `auto` track, and an auto
+     track sizes to its items' MAX-CONTENT, which still reads the inline 320px
+     however the child is laid out. Replacing it with a percentage makes the
+     card's max-content contribution its actual content again (~120px), so the
+     track falls back to being sized by the standings card, where it belongs. */
+  .game-layout__bars {
+    grid-area: bars;
+  }
+
+  .game-layout__bars > * {
+    width: 100% !important;
+  }
+
+  /* Takes the centre area directly now that its wrapper has dissolved. */
+  .game-layout__board {
+    grid-area: center;
+    flex: none;
+    min-height: 0;
+  }
+
+  /* Two buttons per row rather than one. Stacked singly the column wanted 499px
+     of height against the 322px it has, which pushed Rest below the fold; a 2x2
+     block fits all four in about 116px with nothing hidden. The weapon row falls
+     2 + 1 and the nav pairs sit side by side, which buys height there too.
+     The 42px is the panel's own chrome (34px) plus the 8px gap between the pair,
+     so the divisor is genuinely one button's width. The widescreen block's
+     container-query sizing above is correct for a full-width button and roughly
+     twice too large for a half-width one, hence the override.
+     Both selectors are spelled out because the shared phone block earlier in
+     this file targets `.control-row[data-action='true']`, and a bare
+     `.control-row` here loses to it on specificity no matter how far down the
+     file it sits. */
+  .control-row,
+  .control-row[data-action='true'] {
+    flex-wrap: wrap;
+    --btn-font: calc((100cqw - 42px) / 2 * 0.13);
+    --btn-pad-h: calc((100cqw - 42px) / 2 * 0.05);
+    --badge-font: calc((100cqw - 42px) / 2 * 0.1);
+    --badge-gap: calc((100cqw - 42px) / 2 * 0.06);
+    --dot-size: calc((100cqw - 42px) / 2 * 0.07);
+  }
+
+  .control-row > button {
+    width: calc(50% - 4px);
+  }
+}
+
+/* Narrow landscape (768-847px wide). Even the compact arrangement above cannot
+   hold a left column here: 768px less 40px of padding and gaps, less the strip's
+   ~255px, less the 204px controls floor leaves 269px for a board whose minimum
+   is 308px. So the strip moves to a full-width row under the title and the grid
+   drops to two columns, which gives the board the whole width beside the
+   controls (534px at 768px wide) and puts the resource bars under it.
+   Inherits everything else from the block above, whose second arm also matches
+   this range. */
+/* The min-height matters: this trades horizontal room for vertical, stacking the
+   strip and the bars above and below the board instead of beside it. That is the
+   right trade only when there IS vertical room. On a short viewport (800x360)
+   the block above is correct instead — its left column costs height nothing —
+   and without this guard it lost to this block and the board overlapped both the
+   strip and the bars. */
+@media (min-width: 768px) and (max-width: 847px) and (min-height: 501px) and (orientation: landscape) {
+  .game-layout {
+    grid-template-columns:
+      minmax(0, 1fr)
+      minmax(var(--controls-min, 0px), var(--controls-col, 320px));
+    grid-template-rows: auto auto minmax(0, 1fr) auto;
+    grid-template-areas:
+      'title  title'
+      'strip  strip'
+      'center controls'
+      'bars   controls';
+  }
+
+  /* Side by side rather than stacked. Across the full width there is room for
+     both cards, and halving the strip's height is what lets the board clear its
+     308px minimum: at 768x600 the stacked strip left the centre row 277px. */
+  .game-layout__strip {
+    --strip-dir: row;
+  }
+
+  .game-layout__strip > * > * {
+    flex: 1;
+    min-width: 0;
+  }
+}
+
+/* Very short landscape (<= 400px tall, e.g. an 800x360 Android). The compact
+   arrangement's own chrome is the last thing standing between the board and its
+   308px minimum: at 360px tall, 20px of padding, a 38px title row and a 10px gap
+   leave 292px, so the board clamped up to 308 and had 8px cut off the top and
+   bottom rows by `overflow: hidden`, with no scroll to reach them.
+   Halving the padding and gap and dropping the title to 18px gives back 24px,
+   which clears the minimum with room to spare. Scoped to >= 768px wide because
+   narrower landscape phones use the portrait arrangement, which page-scrolls
+   and so is never clipped. */
+@media (min-width: 768px) and (max-height: 400px) {
+  :root {
+    --app-title-font: 18px;
+  }
+
+  .game-layout {
+    padding: 6px;
+    gap: 6px;
   }
 }

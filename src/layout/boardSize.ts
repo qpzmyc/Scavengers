@@ -4,11 +4,18 @@ import { GRID_SIZE } from '../engine';
 // its container instead of shrinking further.
 export const MIN_CELL_PX = 28;
 
-// Board.tsx renders content-box with 6px padding each side, so the board's
-// real rendered size is GRID_SIZE * cell + this, on both axes. Must be
-// subtracted before fitting the board into a measured box, or the board
-// overshoots the box it was sized from by this many pixels.
-export const BOARD_CHROME_PX = 12;
+// How much bigger the board renders than its tiles alone, on both axes: the
+// board's real rendered size is GRID_SIZE * cell + this. Must be subtracted
+// before fitting the board into a measured box, or the board overshoots the box
+// it was sized from by this many pixels.
+//
+// Currently zero, and deliberately still here rather than deleted. Board.tsx has
+// no padding and its outer edge is an inset overlay (border-box, so the 1px sits
+// over the outermost gridlines rather than outside them), which means the board
+// is exactly its tiles. Anything added around the grid later — padding, a
+// content-box border, a frame — has to come back here, or the board will
+// silently overflow the column it was measured from.
+export const BOARD_CHROME_PX = 0;
 
 /**
  * The pixel size of one board tile, given the space the board has to work with.

@@ -8,10 +8,13 @@ import { boardCellSize, BOARD_CHROME_PX, MIN_CELL_PX } from './boardSize';
  * IMPORTANT: the observed element must get its size from the layout around it,
  * never from the board inside it. If the wrapper sizes to its content then the
  * board grows the wrapper, which grows the board, and the layout oscillates or
- * runs away. The CSS in index.css guarantees this — `.game-layout__board` is a
- * flex child with `min-height: 0` inside a definite-height column (desktop and
- * tablet) or a square driven by `aspect-ratio` (phone). Do not give it
- * height:auto with content-driven sizing.
+ * runs away. The CSS in index.css guarantees this three different ways, one per
+ * family of arrangements — `.game-layout__board` is a flex child with
+ * `min-height: 0` inside a definite-height column (desktop and tablet), a square
+ * driven by `aspect-ratio` (portrait phone), or a direct grid item spanning a
+ * `minmax(0, 1fr)` row after its wrapper becomes `display: contents` (landscape
+ * phone and other compact landscape sizes). All three give it a size that comes
+ * from outside. Do not give it height:auto with content-driven sizing.
  *
  * This is a CALLBACK ref, not a plain `useRef` + `useEffect`, on purpose: the
  * wrapper this hook measures does not exist on first mount. `App` renders the

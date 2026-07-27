@@ -42,18 +42,19 @@ function Bar({
   const gaining = prev > cur;
 
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-      <span style={{ width: 56, color: theme.textMuted, fontSize: 12, textTransform: 'uppercase', letterSpacing: 0.4 }}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--bars-row-gap, 10px)' }}>
+      <span style={{ width: 'var(--bars-label-w, 56px)', color: theme.textMuted, fontSize: 'var(--bars-label-font, 12px)', textTransform: 'uppercase', letterSpacing: 0.4 }}>
         {label}
       </span>
       <div
         style={{
           position: 'relative',
           flex: 1,
-          height: 16,
+          height: 'var(--bars-height, 16px)',
           background: theme.surfaceAlt,
           border: `1px solid ${theme.border}`,
-          borderRadius: 8,
+          // Always a full pill, whatever the bar's height becomes.
+          borderRadius: 'calc(var(--bars-height, 16px) / 2)',
           overflow: 'hidden',
         }}
       >
@@ -88,11 +89,11 @@ function Bar({
       </div>
       <span
         style={{
-          width: 52,
+          width: 'var(--bars-value-w, 52px)',
           textAlign: 'right',
           fontVariantNumeric: 'tabular-nums',
           fontWeight: 600,
-          fontSize: 13,
+          fontSize: 'var(--bars-value-font, 13px)',
         }}
       >
         {value}/{max}
@@ -109,19 +110,19 @@ export function ResourceBars({ player, width, preview, showTurnLabel = true, dis
         width,
         display: 'flex',
         flexDirection: 'column',
-        gap: 8,
+        gap: 'var(--bars-gap, 8px)',
         background: theme.surface,
         border: `1px solid ${theme.border}`,
         borderRadius: theme.radius,
         boxShadow: theme.shadow,
-        padding: '12px 14px',
+        padding: 'var(--bars-pad, 12px 14px)',
         boxSizing: 'border-box',
       }}
     >
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2 }}>
-        <span style={{ width: 12, height: 12, borderRadius: '50%', background: player.color, display: 'inline-block' }} />
-        <strong style={{ color: theme.heading }}>{displayName ?? player.color.toUpperCase()}</strong>
-        {showTurnLabel && <span style={{ color: theme.textMuted, fontSize: 12 }}>— your turn</span>}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--bars-gap, 8px)', marginBottom: 2 }}>
+        <span style={{ width: 'var(--bars-dot, 12px)', height: 'var(--bars-dot, 12px)', borderRadius: '50%', background: player.color, display: 'inline-block', flexShrink: 0 }} />
+        <strong style={{ color: theme.heading, fontSize: 'var(--bars-name-font, 15px)' }}>{displayName ?? player.color.toUpperCase()}</strong>
+        {showTurnLabel && <span style={{ color: theme.textMuted, fontSize: 'var(--bars-turn-font, 12px)' }}>— your turn</span>}
       </div>
       <Bar label="Energy" value={player.energy} max={MAX_ENERGY} color={theme.energy} previewValue={preview?.energy} />
       <Bar label="Ammo" value={player.ammo} max={MAX_AMMO} color={theme.ammo} previewValue={preview?.ammo} />

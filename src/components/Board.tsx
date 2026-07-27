@@ -123,9 +123,10 @@ export function Board({
   const visionRadius = visionRadiusForCount(state.turnOrder.length);
   const canSee = (pos: Position) => euclid(viewerPos, pos) <= visionRadius + 0.5;
 
-  // Center of the viewer's tile, in board-pixel space (matching the +6 tile inset).
-  const viewCx = 6 + (viewerPos.x + 0.5) * cellPixelSize;
-  const viewCy = 6 + (viewerPos.y + 0.5) * cellPixelSize;
+  // Center of the viewer's tile, in board-pixel space. The board has no padding,
+  // so tile space and board space share an origin.
+  const viewCx = (viewerPos.x + 0.5) * cellPixelSize;
+  const viewCy = (viewerPos.y + 0.5) * cellPixelSize;
   const visRadiusPx = (visionRadius + 0.5) * cellPixelSize;
 
   const renderToken = (id: PlayerId) => {
@@ -153,9 +154,11 @@ export function Board({
         width: GRID_SIZE * cellPixelSize,
         height: GRID_SIZE * cellPixelSize,
         flexShrink: 0,
-        padding: 6,
+        // No padding and no radius: the board's boundary is the tile grid's own
+        // outer edge (drawn by the overlay near the bottom of this file), not a
+        // frame sitting around it. Everything positioned inside used to be
+        // offset by the 6px padding; those offsets are gone with it.
         background: theme.boardBg,
-        borderRadius: theme.radius + 4,
         boxShadow: theme.shadow,
         boxSizing: 'content-box',
       }}
@@ -175,8 +178,8 @@ export function Board({
               onClick={clickable ? () => onTileClick!({ x, y }) : undefined}
               style={{
                 position: 'absolute',
-                left: x * cellPixelSize + 6,
-                top: y * cellPixelSize + 6,
+                left: x * cellPixelSize,
+                top: y * cellPixelSize,
                 width: cellPixelSize,
                 height: cellPixelSize,
                 backgroundColor: baseBg,
@@ -201,13 +204,29 @@ export function Board({
       <div
         style={{
           position: 'absolute',
-          inset: 6,
+          inset: 0,
           pointerEvents: 'none',
           zIndex: 4,
-          background: `radial-gradient(circle ${visRadiusPx}px at ${viewCx - 6}px ${viewCy - 6}px, rgba(6,8,13,0) 78%, rgba(6,8,13,0.5) 90%, rgba(6,8,13,0.88) 100%)`,
+          background: `radial-gradient(circle ${visRadiusPx}px at ${viewCx}px ${viewCy}px, rgba(6,8,13,0) 78%, rgba(6,8,13,0.5) 90%, rgba(6,8,13,0.88) 100%)`,
         }}
       />
-      <div style={{ position: 'absolute', left: 6, top: 6, zIndex: 5 }}>
+      {/* The board's outer edge, drawn ON the grid's boundary rather than around
+          it: `inset: 0` with border-box puts this 1px exactly over the outermost
+          tiles' own gridlines, so it replaces them instead of doubling them and
+          adds nothing to the board's rendered size. It sits above the fog (which
+          would otherwise darken those gridlines to near-black at the corners and
+          erase any sense of where the grid ends) and above the tints, so the
+          boundary reads the same no matter what is happening on the board. */}
+      <div
+        style={{
+          position: 'absolute',
+          inset: 0,
+          pointerEvents: 'none',
+          zIndex: 7,
+          border: `1px solid ${theme.tileBorder}`,
+        }}
+      />
+      <div style={{ position: 'absolute', left: 0, top: 0, zIndex: 5 }}>
         {state.turnOrder.map((id) => renderToken(id))}
       </div>
       {redTints.map((t, i) => (
@@ -215,8 +234,8 @@ export function Board({
           key={`tint-${t.x}-${t.y}-${i}`}
           style={{
             position: 'absolute',
-            left: t.x * cellPixelSize + 6,
-            top: t.y * cellPixelSize + 6,
+            left: t.x * cellPixelSize,
+            top: t.y * cellPixelSize,
             width: cellPixelSize,
             height: cellPixelSize,
             // Caps at 50% opacity (redTintOn fades to opacity:1) so it reads as a
@@ -238,8 +257,8 @@ export function Board({
           key={`preview-tint-${t.x}-${t.y}-${i}`}
           style={{
             position: 'absolute',
-            left: t.x * cellPixelSize + 6,
-            top: t.y * cellPixelSize + 6,
+            left: t.x * cellPixelSize,
+            top: t.y * cellPixelSize,
             width: cellPixelSize,
             height: cellPixelSize,
             // Pulses between faint and 50% (redTintPulseLoop peaks at opacity:1).

@@ -940,7 +940,9 @@ export function OnlineGame({
         controlsRef={controlsRef}
         title={
           <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, flexWrap: 'wrap' }}>
-            <h1 style={{ fontSize: 26 }}>Scavengers</h1>
+            {/* See the note in App.tsx: shrinks at the very-short landscape
+                breakpoint, where the title row costs the board real height. */}
+            <h1 style={{ fontSize: 'var(--app-title-font, 26px)' }}>Scavengers</h1>
             <span style={{ color: theme.textMuted, fontSize: 13 }}>
               {state.mode === 'lastStanding' ? 'Survival' : 'Deathmatch'}
             </span>

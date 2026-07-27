@@ -1237,7 +1237,9 @@ function App() {
         controlsRef={controlsRef}
         title={
           <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, flexWrap: 'wrap' }}>
-            <h1 style={{ fontSize: 26 }}>Scavengers</h1>
+            {/* A var so the very-short landscape breakpoint can shrink it; that
+                title row is otherwise ~38px of the height the board needs. */}
+            <h1 style={{ fontSize: 'var(--app-title-font, 26px)' }}>Scavengers</h1>
             <span style={{ color: theme.textMuted, fontSize: 13 }}>
               {mode === 'lastStanding' ? 'Survival' : 'Deathmatch'}
             </span>

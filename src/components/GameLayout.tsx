@@ -44,8 +44,15 @@ export function GameLayout({
       <div className="game-layout__title">{title}</div>
       <div className="game-layout__standings">{standings}</div>
       <div className="game-layout__strip">{scoreStrip}</div>
+      {/* The bars sit above the board in a flex column at almost every size. In
+          the compact landscape arrangements the centre column becomes
+          `display: contents` so both of these promote to grid items, letting the
+          bars be placed out of the centre column entirely — under the score strip
+          in the left column, or beneath the board on a narrow one. See the
+          landscape blocks at the bottom of src/index.css. Grid placement ignores
+          DOM order, so nothing here has to move. */}
       <div className="game-layout__center">
-        {bars}
+        <div className="game-layout__bars">{bars}</div>
         <div className="game-layout__board" ref={boardRef}>
           {board}
         </div>
