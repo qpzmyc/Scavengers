@@ -42,7 +42,7 @@ import {
   computeHitTiles,
 } from '../game/animation';
 import type { OnlineRoom } from './useOnlineRoom';
-import { buildOnlineFrames } from './buildOnlineFrames';
+import { planTransition } from './transition';
 import { flowToRequest } from './flowToRequest';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import type { ActionEvent } from './protocol';
@@ -182,7 +182,13 @@ export function OnlineGame({
 
   const prevStateRef = useRef<GameState | null>(null);
   const processedEventRef = useRef<ActionEvent | null>(null);
+  // Two separate timer pools, deliberately. `timersRef` holds notification lifecycles
+  // (a toast's 4.8s dismiss, a delayed kill message) which must survive regardless of
+  // what the board is doing. `animTimersRef` holds ONLY the frame-advance timers of the
+  // animation currently playing, so an event arriving mid-animation can cancel that
+  // animation without also wiping every pending toast off the screen.
   const timersRef = useRef<number[]>([]);
+  const animTimersRef = useRef<number[]>([]);
 
   const schedule = (ms: number, fn: () => void) => {
     const id = window.setTimeout(fn, ms);
@@ -192,7 +198,17 @@ export function OnlineGame({
     timersRef.current.forEach(clearTimeout);
     timersRef.current = [];
   };
-  useEffect(() => () => clearTimers(), []);
+  const scheduleAnim = (ms: number, fn: () => void) => {
+    const id = window.setTimeout(fn, ms);
+    animTimersRef.current.push(id);
+  };
+  // Abandons the in-flight frame sequence. Its onDone never runs, so whatever calls
+  // this owns setting display/prevStateRef/animating to a coherent place afterwards.
+  const clearAnimTimers = () => {
+    animTimersRef.current.forEach(clearTimeout);
+    animTimersRef.current = [];
+  };
+  useEffect(() => () => { clearTimers(); clearAnimTimers(); }, []);
 
   const pushActionNotice = (content: ReactNode, kind: 'warning' | 'kill' | 'immune' | 'phantom' = 'warning') => {
     const id = actionNoticeIdRef.current++;
@@ -220,9 +236,9 @@ export function OnlineGame({
       setDeathAnims(f.death);
       i += 1;
       if (i < frames.length) {
-        schedule(f.holdMs, step);
+        scheduleAnim(f.holdMs, step);
       } else {
-        schedule(f.holdMs, () => {
+        scheduleAnim(f.holdMs, () => {
           setRedTints([]);
           setDeathAnims([]);
           onDone();
@@ -255,9 +271,13 @@ export function OnlineGame({
   useEffect(() => {
     if (!room.state) return;
     if (!room.lastEvent) {
-      // Initial gameStart snapshot, or a resumed snapshot: no event to animate.
-      setDisplay(room.state);
-      prevStateRef.current = room.state;
+      // Initial gameStart snapshot, a resume, or a player leaving: no event to animate.
+      // Kill any in-flight animation first — otherwise its remaining frames keep
+      // firing after the snap and paint an old board over the authoritative one.
+      const snap = planTransition(prevStateRef.current, room.state, null);
+      clearAnimTimers();
+      setDisplay(snap.nextBaseline);
+      prevStateRef.current = snap.nextBaseline;
       processedEventRef.current = null;
       setRedTints([]);
       setDeathAnims([]);
@@ -268,8 +288,13 @@ export function OnlineGame({
     processedEventRef.current = room.lastEvent;
     const event = room.lastEvent;
     const after = room.state;
-    const before = prevStateRef.current ?? room.state;
-    const frames = buildOnlineFrames(before, after, event);
+    // See planTransition for both rules this relies on: the baseline advances now rather
+    // than when the frames finish, and any in-flight sequence must be abandoned first.
+    // An event can land mid-animation whenever a kill grants its actor an extra turn.
+    const plan = planTransition(prevStateRef.current, after, event);
+    clearAnimTimers();
+    prevStateRef.current = plan.nextBaseline;
+    const frames = plan.frames;
 
     if (event.killedPlayerIds.length) {
       const req = event.request;
@@ -335,7 +360,6 @@ export function OnlineGame({
 
     setAnimating(true);
     playFrames(frames, () => {
-      prevStateRef.current = after;
       setDisplay(after);
       setAnimating(false);
       setSending(false);
