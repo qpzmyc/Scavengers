@@ -136,9 +136,21 @@ export function roomReduce(model: RoomModel, input: RoomInput): RoomStep {
       }
       const reconnecting = target !== undefined;
       if (!target) {
-        // Fresh seat: only a never-assigned slot. A reserved seat cannot be taken without its token.
-        // Prefer the requested seat (rematch: keep your color) when it's still open, else the first free one.
-        const open = model.slots.filter((s) => s.token === null && s.connId === null);
+        // Fresh seat: only a never-assigned slot, and only while the room is still
+        // in the lobby. A reserved seat cannot be taken without its token.
+        // Prefer the requested seat (rematch: keep your color) when it's still open,
+        // else the first free one.
+        //
+        // The lobby check is load-bearing: `removePlayer` frees a seat completely
+        // (token AND connId null), which is indistinguishable from a never-assigned
+        // one. Without it, anyone still holding the room code could drop into a live
+        // match on a departed player's seat — they never get a gameStart snapshot so
+        // they sit on "Connecting…" forever, and their `connected: true` would count
+        // toward the resume check below and un-pause the room at random.
+        const open =
+          model.phase === 'lobby'
+            ? model.slots.filter((s) => s.token === null && s.connId === null)
+            : [];
         target = (input.seat && open.find((s) => s.playerId === input.seat)) || open[0];
       }
       if (!target) {
@@ -155,7 +167,14 @@ export function roomReduce(model: RoomModel, input: RoomInput): RoomStep {
       const hostConnId = input.becomeHost ? input.connId : isFirstSeat ? input.connId : model.hostConnId;
       let next: RoomModel = { ...model, slots, hostConnId };
       const out: Outbound[] = [{ to: { connId: input.connId }, msg: { type: 'assigned', playerId: chosen.playerId, token: tokenForSeat } }];
-      if (next.phase === 'paused' && next.slots.every((s) => s.connected) && next.state) {
+      // A seat freed by `removePlayer` has no token and nobody left to reconnect,
+      // so it must not hold the room hostage. Requiring every slot to be connected
+      // deadlocked the match permanently: once anyone had left, the next player to
+      // blink out paused the room and the vacated seat kept the predicate false
+      // forever, with no timer left to fire. Only seats that still hold a token are
+      // waited on.
+      const awaitingReconnect = (s: (typeof next.slots)[number]) => !s.connected && s.token !== null;
+      if (next.phase === 'paused' && !next.slots.some(awaitingReconnect) && next.state) {
         const state = next.state;
         next = { ...next, phase: 'playing' };
         out.push({ to: 'all', msg: { type: 'resumed', state } });

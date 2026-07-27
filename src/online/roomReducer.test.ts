@@ -186,6 +186,40 @@ describe('roomReduce', () => {
     expect(step.model.state!.players[victim].eliminated).toBe(true);
   });
 
+  it('resumes after a reconnect even though an earlier player permanently left', () => {
+    // Regression: the resume check required EVERY slot to be connected, but a seat
+    // freed by removePlayer stays connected:false with nobody left to reconnect, so
+    // the room stayed paused forever with no timer left to fire.
+    let m = roomInit('lastStanding', 4);
+    for (const c of ['A', 'B', 'C', 'D']) m = roomReduce(m, { t: 'join', connId: c, issueToken: `tok${c}` }).model;
+    m = roomReduce(m, { t: 'startGame', connId: 'A' }).model;
+
+    m = roomReduce(m, { t: 'removePlayer', connId: 'C' }).model; // C leaves for good
+    expect(m.phase).toBe('playing');
+
+    m = roomReduce(m, { t: 'disconnect', connId: 'D' }).model; // D blinks out
+    expect(m.phase).toBe('paused');
+
+    const back = roomReduce(m, { t: 'join', connId: 'D2', token: 'tokD', issueToken: 'tokD2' });
+    expect(back.model.phase).toBe('playing');
+    expect(back.out.some((o) => o.to === 'all' && o.msg.type === 'resumed')).toBe(true);
+  });
+
+  it('a stranger cannot claim a seat that a departed player freed mid-match', () => {
+    // Regression: removePlayer frees a seat completely (token and connId null),
+    // which is exactly what the fresh-seat branch looks for, so anyone with the
+    // room code could drop into a live match on the departed player's seat.
+    let m = roomInit('lastStanding', 4);
+    for (const c of ['A', 'B', 'C', 'D']) m = roomReduce(m, { t: 'join', connId: c, issueToken: `tok${c}` }).model;
+    m = roomReduce(m, { t: 'startGame', connId: 'A' }).model;
+    m = roomReduce(m, { t: 'removePlayer', connId: 'C' }).model;
+
+    const stranger = roomReduce(m, { t: 'join', connId: 'X', issueToken: 'tokX' });
+    expect(stranger.out.some((o) => o.msg.type === 'assigned')).toBe(false);
+    expect(stranger.out.some((o) => o.msg.type === 'error')).toBe(true);
+    expect(stranger.model.slots.every((s) => s.connId !== 'X')).toBe(true);
+  });
+
   it('a join WITHOUT the seat token cannot hijack a reserved seat during a pause', () => {
     let m = seatedTwo();
     m = roomReduce(m, { t: 'startGame', connId: 'A' }).model;
