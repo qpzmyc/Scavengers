@@ -37,14 +37,23 @@ export function fakeMove(state: GameState, playerId: PlayerId, direction: Positi
   };
 }
 
-// Enemies (not the actor, alive, not eliminated) whose REAL position sits on `pos`.
-// A phantom landing here — via fake move, or by following the actor's real move —
-// crushes them (a lucky/guessed kill, since the actor can't see hidden real positions).
+// Enemies (not the actor, alive, not eliminated, not immune) whose REAL position
+// sits on `pos`. A phantom landing here — via fake move, or by following the
+// actor's real move — crushes them (a lucky/guessed kill, since the actor can't
+// see hidden real positions).
+//
+// The `immuneTurns` check matches punch/shoot/bomb, which all gate on it too. It
+// used to be missing here, so a player who had just respawned could be crushed
+// straight through the immunity the UI was drawing a halo and a countdown badge
+// for — and the very same tile would have refused an attack with an "is immune"
+// toast. Respawn immunity has to mean the same thing for every kill path.
 export function realOccupantsAt(state: GameState, actorId: PlayerId, pos: Position): PlayerId[] {
   return state.turnOrder.filter((id) => {
     if (id === actorId) return false;
     const o = state.players[id];
-    return o.alive && !o.eliminated && o.position.x === pos.x && o.position.y === pos.y;
+    return (
+      o.alive && !o.eliminated && o.immuneTurns === 0 && o.position.x === pos.x && o.position.y === pos.y
+    );
   });
 }
 

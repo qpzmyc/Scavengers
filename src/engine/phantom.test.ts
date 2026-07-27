@@ -81,6 +81,18 @@ describe('realOccupantsAt', () => {
     const dead = { ...state, players: { ...state.players, p2: { ...state.players.p2, alive: false } } };
     expect(realOccupantsAt(dead, 'p1', { x: 3, y: 3 })).toEqual([]);
   });
+
+  it('skips a player still under respawn immunity, like every other kill path', () => {
+    // punch/shoot/bomb all require immuneTurns === 0. A crush used to ignore it,
+    // so a just-respawned player could be killed through the immunity the UI was
+    // showing a halo and a countdown for.
+    let state = createInitialGameState('lastStanding');
+    state = { ...state, players: { ...state.players, p2: { ...state.players.p2, position: { x: 3, y: 3 } } } };
+    expect(realOccupantsAt(state, 'p1', { x: 3, y: 3 })).toEqual(['p2']);
+
+    const immune = { ...state, players: { ...state.players, p2: { ...state.players.p2, immuneTurns: 2 } } };
+    expect(realOccupantsAt(immune, 'p1', { x: 3, y: 3 })).toEqual([]);
+  });
 });
 
 describe('spawnOwnerAt', () => {
