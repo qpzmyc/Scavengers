@@ -13,20 +13,6 @@
       "runtimeArgs": ["run", "dev"],
       "cwd": "server",
       "port": 8787
-    },
-    {
-      "name": "scavengers-dev-wt",
-      "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev"],
-      "cwd": ".worktrees/online-ux-polish",
-      "port": 5173
-    },
-    {
-      "name": "scavengers-server-wt",
-      "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev"],
-      "cwd": ".worktrees/online-ux-polish/server",
-      "port": 8787
     }
   ]
 }
