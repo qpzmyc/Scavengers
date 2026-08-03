@@ -31,10 +31,6 @@ _Empty._
   through the shipped UI, but a modified client could cheat an online match.
   Needs a decision on which rules the server enforces and what it does with a
   rejected action (drop it, or end the match) before it can be written.
-- **Narrow landscape has no fitting arrangement.** Between 768px and 806px
-  wide with height under 501px, no current arrangement fits and the board
-  overflows its column. Every other size is covered. Needs a layout decision
-  (a new arrangement, or letting that band scroll) rather than a tweak.
 - **Runtime verification for the two online animation races.** The ordering
   logic is covered by `src/online/transition.test.ts`, but the races have
   never been exercised against two live clients. The browser pane throttles
@@ -43,6 +39,13 @@ _Empty._
 
 ## Recently Done
 
+- **Narrow landscape no longer overflows.** The score strip sits in a grid
+  `auto` track, which sizes to max-content, so the kills line's `nowrap` text
+  widened the column instead of ellipsing and pushed the board past its 28px
+  tile floor. Capping the track from what must not shrink fixes it at every
+  width without a new breakpoint. Survival was the worse case — it overflowed
+  36px with no kill text at all — and its four heart chips now fit by dropping
+  the redundant colour dot, which the heart already carries.
 - **Responsive game layout system.** Slot-based `GameLayout` shell with
   measured board sizing, a `--ui-scale` system for side panels and buttons,
   and dedicated arrangements for phone, portrait tablet, landscape, and

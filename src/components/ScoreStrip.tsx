@@ -49,7 +49,11 @@ export function ScoreStrip({ state, onOpenStandings, onOpenKills, lastKill }: Sc
             const remaining = Math.max(0, state.deathCap - p.deaths);
             return (
               <span key={id} style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0, opacity: p.eliminated ? 0.4 : 1 }}>
-                <span style={{ width: 10, height: 10, borderRadius: '50%', background: p.color, display: 'inline-block' }} />
+                {/* Classed so the narrow-landscape arrangement can drop it in
+                    survival, where the heart beside it already carries this
+                    exact colour. See the `[data-standings='lives']` rule in the
+                    compact landscape block in src/index.css. */}
+                <span className="strip-chip-dot" style={{ width: 10, height: 10, borderRadius: '50%', background: p.color, display: 'inline-block' }} />
                 {showScore ? (
                   <span style={{ fontSize: 14, fontWeight: 600, fontVariantNumeric: 'tabular-nums', color: theme.text }}>
                     {p.score}

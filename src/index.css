@@ -72,6 +72,16 @@
   --dot-size: 8px;
   --btn-radius: 8px;
 
+  /* The smallest square the board can render: GRID_SIZE * MIN_CELL_PX, i.e.
+     11 * 28 from src/engine/constants.ts and src/layout/boardSize.ts. It is the
+     size the board CLAMPS UP TO, not a size it shrinks past — boardCellSize
+     never returns a cell under MIN_CELL_PX, because smaller tiles stop being
+     reliably clickable. So a column narrower than this does not get a smaller
+     board, it gets a board that overflows it.
+     Mirrored here rather than imported because CSS cannot read the TS constants;
+     if either of those two numbers changes, change this with them. */
+  --board-min: 308px;
+
   color-scheme: dark;
   font-family: system-ui, 'Segoe UI', Roboto, sans-serif;
   font-size: 15px;
@@ -842,9 +852,50 @@ button:disabled {
     display: none;
   }
 
+  /* The max-width is what stops a kill message from squeezing the board out of
+     its own column. This is an `auto` track, so it sizes to its items'
+     MAX-CONTENT — and the kills button is `white-space: nowrap`, which makes its
+     max-content the full untruncated message. Its `text-overflow: ellipsis`
+     therefore never fires: rather than the text shrinking to fit the column, the
+     column grows to fit the text. Measured at 768x420 with four players,
+     "No kills yet" gives a 166px column and "YELLOW bombed GREEN and RED" a
+     238px one, and every one of those 72px comes off the board. Once the board's
+     track falls under --board-min the board does not shrink to match (see that
+     constant), so it renders wider than its track and paints over the controls.
+
+     The cap is not a magic number: it is what remains after the things that must
+     not shrink — the grid's 40px of padding and gaps at this size, the controls
+     floor, and a board at its minimum tile size. That makes it exact at every
+     width instead of tied to a breakpoint, and inert wherever the strip already
+     fits, which is every width at which nothing was wrong. At 768px it comes out
+     at 216px and leaves the board exactly its 308px minimum.
+
+     Capping the track is also the only thing that makes the ellipsis work as
+     intended: `min-width: 0` on the button bounds its MINIMUM, which was never
+     the problem, and does nothing about a max-content contribution. */
   .game-layout__strip {
     grid-area: strip;
     display: block;
+    max-width: calc(100vw - 40px - var(--controls-min) - var(--board-min));
+  }
+
+  /* SURVIVAL ONLY, and only at this size. Once the cap above holds the board's
+     column open, this column can spare 192px — and survival's four chips want
+     218px, because a life reads "3x<heart>" where a deathmatch score is a single
+     digit. Shrinking the text cannot close a 26px gap: measured at 768x420, 12px
+     text gives 210px, 11px gives 202px, and even 10px — already under the
+     legibility floor — still comes to 193px, a pixel short. Dropping the dot
+     closes it outright at 172px, with 20px still spare, and MAX_DEATH_CAP is 6
+     so the count never grows to two digits and eats that margin.
+     It costs no information: in survival the heart is drawn in the player's own
+     colour, so the dot was a second copy of the same fact. Deathmatch keeps its
+     dot at every size — there the chip is a white score with no other colour on
+     it, so the dot is the only thing saying whose score it is.
+     !important because the dot carries an inline `display: inline-block` from
+     ScoreStrip.tsx, and an inline style beats a stylesheet rule at any
+     specificity — the same reason `.game-layout__bars > *` needs it below. */
+  .game-layout[data-standings='lives'] .strip-chip-dot {
+    display: none !important;
   }
 
   .game-layout__center {
@@ -935,8 +986,15 @@ button:disabled {
   /* Side by side rather than stacked. Across the full width there is room for
      both cards, and halving the strip's height is what lets the board clear its
      308px minimum: at 768x600 the stacked strip left the centre row 277px. */
+  /* The cap inherited from the block above has to come off. There it is the
+     strip's share of a three-column row and holds the board's column open; here
+     the strip spans the full width on its own row above the board, so it takes
+     width from nothing and the cap only truncates it for no reason — at 768px it
+     squashed a 748px row into 216px, clipping the fourth player's chip and
+     ellipsing "No kills yet". Nothing about this arrangement needs a limit. */
   .game-layout__strip {
     --strip-dir: row;
+    max-width: none;
   }
 
   .game-layout__strip > * > * {
