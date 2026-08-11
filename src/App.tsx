@@ -1356,11 +1356,20 @@ function App() {
             </div>
             {phase === 'replaying' && (
               <div style={{ position: 'absolute', inset: 0, boxSizing: 'border-box', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '12px 16px', borderRadius: theme.radius, background: theme.surface, border: `1px solid ${theme.border}`, color: theme.textMuted, textAlign: 'center' }}>
-                {(() => {
-                  if (!replayActorId) return 'Replaying…';
-                  const label = state.players[replayActorId].color.toUpperCase();
-                  return <>Replaying {renderColoredText(label, colorSet)}'s turn…</>;
-                })()}
+                {/* One span, deliberately: this box is `display: flex` to centre the
+                    line, which makes each run of text its own anonymous flex item and
+                    strips the whitespace at its edges — so "Replaying " lost its
+                    trailing space and rendered as "ReplayingGREEN's turn…". Wrapping
+                    the whole line in a single flex item puts that space back inside
+                    normal inline layout. Do not remove without also changing the
+                    centring. */}
+                <span>
+                  {(() => {
+                    if (!replayActorId) return 'Replaying…';
+                    const label = state.players[replayActorId].color.toUpperCase();
+                    return <>Replaying {renderColoredText(label, colorSet)}'s turn…</>;
+                  })()}
+                </span>
               </div>
             )}
           </div>
