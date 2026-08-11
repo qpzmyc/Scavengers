@@ -106,6 +106,14 @@ function App() {
   const [mode, setMode] = useState<GameMode>('lastStanding');
   const [state, setState] = useState<GameState>(() => createInitialGameState('lastStanding', 2));
   const [display, setDisplay] = useState<GameState>(state);
+  // A third clock, behind both `state` and `display`, feeding ONLY the standings
+  // readouts (Leaderboard / Lives / ScoreStrip). `state` advances the instant a
+  // player confirms, which made the score jump — and its count-up fire — while
+  // the ripple and death fade were still playing. This holds the old number
+  // until the kill has finished animating, and then holds it again through the
+  // handoff so the incoming player reads the score from before the turn they
+  // are about to watch; the replay is what reveals the change (see startTurn).
+  const [standings, setStandings] = useState<GameState>(state);
   const [phase, setPhase] = useState<Phase>('playing');
   const [flow, setFlow] = useState<Flow>({ kind: 'menu' });
   // Which player's turn is currently being animated during a replay, so the
@@ -227,6 +235,9 @@ function App() {
     setMode(save.mode);
     setState(save.state);
     setDisplay(save.state);
+    // A save always resumes on the handoff screen, so the standings start where
+    // that player's replay starts, exactly as a live handoff leaves them.
+    setStandings(save.turnStart[save.state.currentTurn] ?? save.state);
     setNotifications(save.notifications);
     notificationsRef.current = save.notifications;
     notificationIdRef.current = save.notificationId;
@@ -252,6 +263,7 @@ function App() {
     setMode(nextMode);
     setState(s);
     setDisplay(s);
+    setStandings(s);
     // Open with the same handoff screen every turn uses, so the very first player
     // gets a "P1's turn — Start turn" gate too (nothing to replay yet).
     setPhase('handoff');
@@ -592,6 +604,7 @@ function App() {
       setRedTints([]);
       if (next.winner !== null || next.draw != null) {
         clearLocalSave(); // finished games aren't resumable
+        setStandings(next); // final scores, and nobody is waiting to be handed the device
         setPhase('playing'); // game over screen
       } else if (turnPasses) {
         // This actor has already watched their own turn live, so `next` becomes the
@@ -615,11 +628,20 @@ function App() {
           ...(pendingLogRef.current[nextId] ?? []),
         ];
         persistLocal(next); // settled handoff boundary → resumable at next player's turn
+        // Rewind the standings to the incoming player's own replay baseline, so the
+        // handoff card shows them the score as it stood when they last had the
+        // device. Their replay is what earns the change, and startTurn applies it
+        // once that replay finishes. The rewind never animates as a count-DOWN:
+        // the handoff screen is an early return (a separate tree), so these
+        // components remount and useScoreCounts takes its first-sight branch.
+        setStandings(turnStartRef.current[nextId] ?? next);
         setPhase('handoff');
       } else {
         // Extra turn (kill streak): same actor keeps going. Snapshot here too so quitting
         // mid-streak resumes at the start of this extra turn with the kill already counted.
         persistLocal(next);
+        // The kill has finished animating, so let the actor's own score land now.
+        setStandings(next);
         setPhase('playing'); // extra turn — same actor keeps going
       }
     });
@@ -918,6 +940,9 @@ function App() {
             replayRef.current = [];
             setReplayActorId(null);
             setFlow({ kind: 'menu' });
+            // The replay has now shown this player every kill they missed, so the
+            // standings catch up and count to their real values in front of them.
+            setStandings(state);
             setPhase('playing');
           });
         },
@@ -1097,7 +1122,7 @@ function App() {
           </h1>
         </div>
         <div style={{ marginTop: 10, marginBottom: 96 }}>
-          {state.mode === 'lastStanding' ? <Lives state={state} /> : <Leaderboard state={state} />}
+          {state.mode === 'lastStanding' ? <Lives state={standings} /> : <Leaderboard state={standings} />}
         </div>
         <button
           onClick={startTurn}
@@ -1246,7 +1271,7 @@ function App() {
                 </h1>
               </div>
               <div style={{ padding: '0 24px' }}>
-                {state.mode === 'lastStanding' ? <Lives state={state} /> : <Leaderboard state={state} />}
+                {state.mode === 'lastStanding' ? <Lives state={standings} /> : <Leaderboard state={standings} />}
               </div>
               {/* Dismiss on the left, the action we expect on the right, and only the
                   right one filled. Two identical buttons would make restarting and
@@ -1300,11 +1325,11 @@ function App() {
             </span>
           </div>
         }
-        standings={state.mode === 'lastStanding' ? <Lives state={state} /> : <Leaderboard state={state} />}
+        standings={state.mode === 'lastStanding' ? <Lives state={standings} /> : <Leaderboard state={standings} />}
         standingsKind={state.mode === 'lastStanding' ? 'lives' : 'leaderboard'}
         scoreStrip={
           <ScoreStrip
-            state={state}
+            state={standings}
             onOpenStandings={() => setPhonePanel('standings')}
             onOpenKills={() => setPhonePanel('kills')}
             lastKill={lastKill}
@@ -1388,8 +1413,8 @@ function App() {
       {phonePanel === 'standings' && (
         <Modal title={standingsLabel(state.mode)} onClose={() => setPhonePanel(null)}>
           {state.mode === 'lastStanding'
-            ? <Lives state={state} titledExternally />
-            : <Leaderboard state={state} titledExternally />}
+            ? <Lives state={standings} titledExternally />
+            : <Leaderboard state={standings} titledExternally />}
         </Modal>
       )}
       {phonePanel === 'kills' && (
