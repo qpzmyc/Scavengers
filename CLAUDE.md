@@ -5,7 +5,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Commands
 
 ```bash
-npm run dev        # Vite dev server (http://localhost:5173)
+npm run dev        # Vite dev server (http://localhost:5180 via .claude/launch.json; bare `vite` still defaults to 5173)
 npm run build      # tsc -b (typecheck) + vite build
 npm run test       # Run the full Vitest suite once
 npm run lint       # oxlint
