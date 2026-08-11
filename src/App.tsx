@@ -1317,17 +1317,34 @@ function App() {
           />
         }
         bars={
-          phase === 'replaying' ? (
-            <div style={{ width: columnWidth, boxSizing: 'border-box', padding: '12px 16px', borderRadius: theme.radius, background: theme.surface, border: `1px solid ${theme.border}`, color: theme.textMuted, textAlign: 'center' }}>
-              {(() => {
-                if (!replayActorId) return 'Replaying…';
-                const label = state.players[replayActorId].color.toUpperCase();
-                return <>Replaying {renderColoredText(label, colorSet)}'s turn…</>;
-              })()}
+          // The replay banner used to REPLACE ResourceBars, and it is ~55px
+          // shorter. Both sit in the same flex column as the board (see
+          // GameLayout), so the board absorbed that difference and visibly
+          // resized on every phase change. It only showed up when the board was
+          // height-bound rather than width-bound: at 1440x900 in survival, where
+          // the narrower Lives card leaves the centre column 865px wide, the
+          // board went 671px while playing to 726px while replaying. Deathmatch
+          // at the same size is width-bound, which is why it looked fine there.
+          //
+          // Keeping ResourceBars mounted and merely invisible means the column
+          // reserves exactly the same height in both phases, and keeps doing so
+          // if ResourceBars ever changes size. `visibility: hidden` also keeps it
+          // out of the accessibility tree, so no resource values leak into a
+          // phase where the viewer is not meant to be reading them.
+          <div style={{ position: 'relative', width: columnWidth }}>
+            <div style={{ visibility: phase === 'replaying' ? 'hidden' : 'visible' }}>
+              <ResourceBars player={barsPlayer} width={columnWidth} preview={preview} />
             </div>
-          ) : (
-            <ResourceBars player={barsPlayer} width={columnWidth} preview={preview} />
-          )
+            {phase === 'replaying' && (
+              <div style={{ position: 'absolute', inset: 0, boxSizing: 'border-box', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '12px 16px', borderRadius: theme.radius, background: theme.surface, border: `1px solid ${theme.border}`, color: theme.textMuted, textAlign: 'center' }}>
+                {(() => {
+                  if (!replayActorId) return 'Replaying…';
+                  const label = state.players[replayActorId].color.toUpperCase();
+                  return <>Replaying {renderColoredText(label, colorSet)}'s turn…</>;
+                })()}
+              </div>
+            )}
+          </div>
         }
         board={
           <Board

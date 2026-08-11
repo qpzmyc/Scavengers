@@ -30,9 +30,6 @@ _Empty._
   wrapper are written twice, once in `src/App.tsx` and once in
   `src/online/OnlineGame.tsx`. Both already render through `GameLayout`, so
   the shared pieces can move up.
-- **Stop the board resizing between phases.** At 1440×900 the board measures
-  ~716px during replay and ~660px during play, so it visibly jumps on phase
-  change. Needs the sizing input to be phase-independent.
 
 ## Deferred / Needs Planning
 
@@ -80,6 +77,18 @@ _Empty._
   them — a real attempt needs a scripted harness, not manual clicking.
 
 ## Recently Done
+
+- **The board no longer resizes on a phase change.** The replay banner replaced
+  ResourceBars and was ~55px shorter, and both share `.game-layout__center` with
+  the board, so the board absorbed the difference. It only showed when the board
+  was height-bound rather than width-bound, which is why it was visible in
+  survival and not in deathmatch at the same 1440x900: the narrower Lives card
+  leaves the centre column 865px wide, so `boardCellSize` takes the height, and
+  the board went 671px playing to 726px replaying. ResourceBars now stays
+  mounted under `visibility: hidden` during replay and the banner lays over the
+  space it reserves, so the column reserves the same height in both phases and
+  keeps doing so if ResourceBars changes size later. Hotseat only; OnlineGame
+  always rendered ResourceBars and never had this.
 
 - **Buttons now show being pressed and holding keyboard focus.** Chosen from
   three treatments; the pick was "press down", so `button:active` dips the
