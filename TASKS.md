@@ -13,12 +13,15 @@ _Empty._
 
 ## Backlog / Ideas
 
-- **No pressed or keyboard-focus state on any button.** `src/index.css` defines
-  `button:hover:not(:disabled)` and `button:disabled` but no `:active` and no
-  `:focus-visible`. So a tap gives no confirmation it registered, and anyone
-  navigating by keyboard or gamepad moves through the game blind. Found during
-  the 2026-08-09 polish survey; designing the two states is a taste call that
-  affects every control, so it needs a decision rather than a quick patch.
+- **The hover state never reaches the inline-styled buttons.**
+  `button:hover:not(:disabled)` in `src/index.css` sets `border-color`, but
+  `primaryBtn` and `toggleBtn` (`src/online/OnlineSession.tsx`,
+  `src/components/menu/MenuFlow.tsx`) set `border` inline, and an inline style
+  beats a stylesheet rule. So the game's most prominent buttons have had no
+  hover feedback at all. Found while adding the pressed and focus states, which
+  sidestep this by using properties nothing sets inline. Fixing hover means
+  either moving those inline styles into CSS classes or giving hover a property
+  that is not set inline.
 
 - **Deduplicate the layout hooks.** `useBoardColumn` and `useElementWidth`
   (`src/layout/`) are roughly 85% the same code. Collapse into one hook.
@@ -77,6 +80,21 @@ _Empty._
   them — a real attempt needs a scripted harness, not manual clicking.
 
 ## Recently Done
+
+- **Buttons now show being pressed and holding keyboard focus.** Chosen from
+  three treatments; the pick was "press down", so `button:active` dips the
+  button 1px and dims it to `brightness(0.86)`, and `button:focus-visible`
+  draws a 2px accent ring at 2px offset. Built from `transform`, `filter` and
+  `outline` on purpose: about 70 buttons set `background` and `border` inline,
+  which a stylesheet rule cannot override, so a background-based press would
+  have silently skipped the game's most prominent buttons. `:focus-visible`
+  rather than `:focus` keeps the ring off mouse clicks. No `prefers-reduced-motion`
+  guard, since reduced motion was considered and rejected in the polish survey.
+  The pressed and focus states could not be triggered inside the browser pane
+  (`document.hasFocus()` is false there, so `:focus-visible` never engages);
+  what was verified is that both rules parse into the stylesheet with the
+  intended declarations and that those exact declarations render correctly on
+  the comparison page, on inline-styled buttons as well as plain ones.
 
 - **Three quick wins: modal keyboard support, table naming, long lobby names.**
   Modal now closes on Escape, confines Tab to the panel, and hands focus back to
