@@ -35,6 +35,11 @@
   --lb-metric-col: calc(68 * var(--ui-unit));
   --lb-cell-pad: calc(10 * var(--ui-unit));
   --lb-head-font: calc(12 * var(--ui-unit));
+  /* Tracking on the header's all-caps labels. A token rather than a fixed value
+     because it is width the phone cannot spare: at 0.4px, "DEATHS" spends 2.4px
+     of a 38px column on letter gaps. Desktop keeps the looser setting, which is
+     what all-caps wants when there is room for it. */
+  --lb-head-tracking: 0.4px;
   --lb-value-font: calc(16 * var(--ui-unit));
   /* Row height for Leaderboard.tsx's absolutely-positioned, rank-animated rows.
      JS only ever multiplies this by `rank`/`ids.length` inside calc() — the
@@ -81,6 +86,17 @@
      Mirrored here rather than imported because CSS cannot read the TS constants;
      if either of those two numbers changes, change this with them. */
   --board-min: 308px;
+
+  /* Two shared easing curves, the start of a set. Everything that ARRIVES on
+     screen decelerates into place; everything that LEAVES accelerates away. That
+     split is the whole convention, and it is what stops each new animation from
+     inventing its own feel — this file had fifteen distinct duration and easing
+     combinations before these existed.
+     Only the modal uses them so far. The older animations were deliberately left
+     on their hand-tuned curves rather than migrated, since retuning motion that
+     nobody complained about was not the job. Adopt these when next touching one. */
+  --ease-enter: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --ease-exit: cubic-bezier(0.4, 0, 1, 1);
 
   color-scheme: dark;
   font-family: system-ui, 'Segoe UI', Roboto, sans-serif;
@@ -235,6 +251,64 @@ button:disabled {
   to {
     opacity: 1;
     transform: scale(1);
+  }
+}
+
+/* Modal entrance and exit, shared by every popup in the game (Standings, Kills,
+   ConfirmDialog, TextInputPopup, the Create Room picker) because they all render
+   through src/components/Modal.tsx.
+
+   The panel rises rather than just fading: a fade alone leaves the panel with no
+   relationship to anything, and the rise reads as the panel arriving from the
+   bottom edge the way a sheet does. Chosen over growing it out of the control
+   that opened it, which would have meant every caller passing its own screen
+   position for a link that is real for the standings and invented for a
+   confirm box.
+
+   The exit runs shorter than the entrance. A thing arriving deserves the time it
+   takes to be noticed; a thing leaving is already understood and holding it on
+   screen only delays what the player asked for.
+
+   The exit durations MUST stay in step with EXIT_MS in Modal.tsx, which is how
+   long the component stays mounted after a close is requested. If they drift the
+   modal is either cut off mid-exit or lingers invisibly, swallowing clicks. */
+@keyframes modalScrimIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes modalScrimOut {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes modalPanelIn {
+  from {
+    opacity: 0;
+    transform: translateY(34px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes modalPanelOut {
+  from {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(22px);
   }
 }
 
@@ -617,10 +691,26 @@ button:disabled {
    re-clip the card on a 375px phone. */
 @media (max-width: 767px) {
   :root {
+    /* The header, not the numbers, sets how wide a metric column has to be. At
+       5px of padding a 46px column left 36px of usable space, while "DEATHS"
+       rendered 43px and "STREAK" 42px, so both spilled past their own column and
+       the three labels ended up 3px and 4px apart. They read as one word.
+
+       The extra room comes from the PADDING rather than the track width, and
+       that is not a stylistic preference. Measured at 390px, the grid is 272px
+       and the name column needs every one of its 88px: "YELLOW" wants 60px of
+       text and the cell spends 30px on the colour dot, its gap, and padding.
+       Taking 8px out of the name column to widen the tracks truncated it to
+       "YELL…". Padding is the only slack that costs nothing.
+
+       At 3px, usable space is 40px against a 39.8px "DEATHS" at the eased type
+       below, so the labels clear each other with about 6px between them.
+       The 304px budget above is untouched: 88 + 4*46 + 32 = 304. */
     --lb-name-col: 88px;
     --lb-metric-col: 46px;
-    --lb-cell-pad: 5px;
-    --lb-head-font: 10px;
+    --lb-cell-pad: 3px;
+    --lb-head-font: 9.5px;
+    --lb-head-tracking: 0.2px;
     --lb-value-font: 14px;
 
     --modal-pad: 16px;

@@ -1,5 +1,11 @@
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { theme } from '../theme';
+
+// How long the exit animation runs, matching modalScrimOut / modalPanelOut in
+// src/index.css. Change both together or the modal is cut off mid-exit (too
+// short) or hangs around invisible, still covering the screen (too long).
+const EXIT_MS = 180;
 
 export function Modal({
   title,
@@ -10,9 +16,32 @@ export function Modal({
   onClose: () => void;
   children: ReactNode;
 }) {
+  // An exit animation can only be seen if the thing playing it is still on
+  // screen, and every caller drops this component the instant onClose fires. So
+  // the modal owns its own goodbye: a close request plays the exit here first
+  // and only then tells the caller, which keeps all five call sites unchanged.
+  const [closing, setClosing] = useState(false);
+  const exitTimer = useRef<number | null>(null);
+
+  useEffect(
+    () => () => {
+      if (exitTimer.current !== null) window.clearTimeout(exitTimer.current);
+    },
+    [],
+  );
+
+  const requestClose = useCallback(() => {
+    // A second click while the modal is already leaving would queue a second
+    // onClose. Harmless for a popup, but not for ConfirmDialog, whose onClose
+    // runs a real action.
+    if (exitTimer.current !== null) return;
+    setClosing(true);
+    exitTimer.current = window.setTimeout(onClose, EXIT_MS);
+  }, [onClose]);
+
   return (
     <div
-      onClick={onClose}
+      onClick={requestClose}
       style={{
         position: 'fixed',
         inset: 0,
@@ -21,6 +50,9 @@ export function Modal({
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
+        animation: closing
+          ? `modalScrimOut ${EXIT_MS}ms var(--ease-exit) forwards`
+          : 'modalScrimIn 200ms var(--ease-enter) backwards',
       }}
     >
       <div
@@ -38,10 +70,16 @@ export function Modal({
           flexDirection: 'column',
           alignItems: 'center',
           gap: 20,
+          // Rises further and over longer than the scrim fades, so the panel is
+          // still arriving once the background has finished dimming. Reversing
+          // that reads as the panel being late.
+          animation: closing
+            ? `modalPanelOut ${EXIT_MS}ms var(--ease-exit) forwards`
+            : 'modalPanelIn 260ms var(--ease-enter) backwards',
         }}
       >
         <button
-          onClick={onClose}
+          onClick={requestClose}
           aria-label="Close"
           style={{
             position: 'absolute',

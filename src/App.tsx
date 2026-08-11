@@ -40,7 +40,7 @@ import { OnlineSession } from './online/OnlineSession';
 import { ConfirmDialog } from './components/ConfirmDialog';
 import { loadLocalSave, saveLocalGame, clearLocalSave } from './game/localSave';
 import type { KillNotification } from './game/localSave';
-import { theme } from './theme';
+import { SPAWN_TINT, theme } from './theme';
 import { useBoardColumn } from './layout/useBoardColumn';
 import { useElementWidth } from './layout/useElementWidth';
 import { GameLayout } from './components/GameLayout';
@@ -279,6 +279,18 @@ function App() {
     clearTimers();
     setPhase('playing');
     setRoute({ kind: 'menu' });
+  };
+
+  // Play the same match again without walking back through the settings screen.
+  // Every setting is read off the finished game rather than remembered separately,
+  // so a rematch cannot drift from what was actually just played. The win overlay
+  // clears itself: startGame builds a state whose winner is null, which flips
+  // `gameOver` false and lets the win-sequence effect above reset its three flags.
+  const rematch = () => {
+    startGame(state.mode, state.turnOrder.length, {
+      deathCap: state.deathCap,
+      targetScore: state.targetScore,
+    });
   };
 
   // A fixed top-right "Menu" button (identical look + location on the handoff screen
@@ -1188,7 +1200,9 @@ function App() {
             alignItems: 'center',
             justifyContent: 'center',
             gap: 28,
-            padding: 24,
+            // No horizontal padding: the result band below spans the full width, so
+            // the padding it would otherwise inherit lives on the inner blocks instead.
+            padding: '24px 0',
             boxSizing: 'border-box',
             overflowY: 'auto',
             pointerEvents: winScreenReady ? 'auto' : 'none',
@@ -1201,37 +1215,79 @@ function App() {
                 flexDirection: 'column',
                 alignItems: 'center',
                 gap: 28,
+                width: '100%',
                 opacity: winContentIn ? 1 : 0,
                 transition: 'opacity 3s ease',
               }}
             >
-              <h1 style={{ fontSize: 48, margin: 0, textAlign: 'center' }}>
-                {state.draw
-                  ? renderColoredText(
-                      `${state.draw.map((id) => state.players[id].color.toUpperCase()).join(', ')} Win!`,
-                      colorSet
-                    )
-                  : <>{renderColoredText(state.players[state.winner!].color.toUpperCase(), colorSet)} Wins!</>}
-              </h1>
-              <div>
-                {state.mode === 'lastStanding' ? <Lives state={state} /> : <Leaderboard state={state} />}
-              </div>
-              <button
-                onClick={backToMenu}
+              {/* The result is a band across the full width rather than a line of
+                  text, which is what stops this screen reading like the between-turns
+                  handoff screen (same title, same small card, same single button).
+                  The fill is the winner's own SPAWN_TINT, the translucent version of
+                  their colour already used to shade their corner of the board, not the
+                  colour at full strength: a saturated full-bleed band would be the
+                  loudest thing in the game. A draw has no single colour to use, so it
+                  falls back to the neutral surface. */}
+              <div
                 style={{
-                  marginTop: 8,
-                  padding: '14px 32px',
-                  fontSize: 18,
-                  fontWeight: 700,
-                  background: theme.accent,
-                  border: `1px solid ${theme.accent}`,
-                  color: '#fff',
-                  borderRadius: 10,
-                  cursor: 'pointer',
+                  width: '100%',
+                  padding: '24px',
+                  boxSizing: 'border-box',
+                  textAlign: 'center',
+                  background: state.draw
+                    ? theme.surface
+                    : SPAWN_TINT[state.players[state.winner!].color] ?? theme.surface,
+                  borderTop: `1px solid ${theme.border}`,
+                  borderBottom: `1px solid ${theme.border}`,
                 }}
               >
-                Back to Menu
-              </button>
+                <h1 style={{ fontSize: 48, margin: 0 }}>
+                  {state.draw
+                    ? renderColoredText(
+                        `${state.draw.map((id) => state.players[id].color.toUpperCase()).join(', ')} Win!`,
+                        colorSet
+                      )
+                    : <>{renderColoredText(state.players[state.winner!].color.toUpperCase(), colorSet)} Wins!</>}
+                </h1>
+              </div>
+              <div style={{ padding: '0 24px' }}>
+                {state.mode === 'lastStanding' ? <Lives state={state} /> : <Leaderboard state={state} />}
+              </div>
+              {/* Dismiss on the left, the action we expect on the right, and only the
+                  right one filled. Two identical buttons would make restarting and
+                  leaving look like the same weight of decision. */}
+              <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', justifyContent: 'center', padding: '0 24px' }}>
+                <button
+                  onClick={backToMenu}
+                  style={{
+                    padding: '14px 28px',
+                    fontSize: 18,
+                    fontWeight: 700,
+                    background: theme.surfaceAlt,
+                    border: `1px solid ${theme.border}`,
+                    color: theme.text,
+                    borderRadius: 10,
+                    cursor: 'pointer',
+                  }}
+                >
+                  Back to Menu
+                </button>
+                <button
+                  onClick={rematch}
+                  style={{
+                    padding: '14px 32px',
+                    fontSize: 18,
+                    fontWeight: 700,
+                    background: theme.accent,
+                    border: `1px solid ${theme.accent}`,
+                    color: '#fff',
+                    borderRadius: 10,
+                    cursor: 'pointer',
+                  }}
+                >
+                  Play again
+                </button>
+              </div>
             </div>
           )}
         </div>

@@ -32,7 +32,7 @@ import { ScoreStrip } from '../components/ScoreStrip';
 import { Modal } from '../components/Modal';
 import { useBoardColumn } from '../layout/useBoardColumn';
 import { useElementWidth } from '../layout/useElementWidth';
-import { theme } from '../theme';
+import { SPAWN_TINT, theme } from '../theme';
 import {
   type AnimFrame,
   DIRS8,
@@ -871,7 +871,9 @@ export function OnlineGame({
             alignItems: 'center',
             justifyContent: 'center',
             gap: 28,
-            padding: 24,
+            // Matches the hotseat win screen: no horizontal padding, so the result
+            // band below can span the full width. See src/App.tsx.
+            padding: '24px 0',
             boxSizing: 'border-box',
             overflowY: 'auto',
             pointerEvents: winScreen ? 'auto' : 'none',
@@ -884,22 +886,40 @@ export function OnlineGame({
                 flexDirection: 'column',
                 alignItems: 'center',
                 gap: 28,
+                width: '100%',
                 opacity: winContentIn ? 1 : 0,
                 transition: 'opacity 3s ease',
               }}
             >
-              <h1 style={{ fontSize: 48, margin: 0, textAlign: 'center' }}>
-                {drawIds ? (
-                  <>
-                    {drawIds.map((id, i) => (
-                      <Fragment key={id}>{i > 0 ? ', ' : ''}{colorName(id, nameFor(id), state)}</Fragment>
-                    ))}{' '}Win!
-                  </>
-                ) : (
-                  <>{colorName(winnerId!, nameFor(winnerId!), state)} Wins!</>
-                )}
-              </h1>
-              <div>
+              {/* Same result band as hotseat, so a match ends the same way whichever
+                  mode it was played in. The fill is the winner's own SPAWN_TINT; a
+                  draw has no single colour and falls back to the neutral surface. */}
+              <div
+                style={{
+                  width: '100%',
+                  padding: '24px',
+                  boxSizing: 'border-box',
+                  textAlign: 'center',
+                  background: drawIds
+                    ? theme.surface
+                    : SPAWN_TINT[state.players[winnerId!].color] ?? theme.surface,
+                  borderTop: `1px solid ${theme.border}`,
+                  borderBottom: `1px solid ${theme.border}`,
+                }}
+              >
+                <h1 style={{ fontSize: 48, margin: 0 }}>
+                  {drawIds ? (
+                    <>
+                      {drawIds.map((id, i) => (
+                        <Fragment key={id}>{i > 0 ? ', ' : ''}{colorName(id, nameFor(id), state)}</Fragment>
+                      ))}{' '}Win!
+                    </>
+                  ) : (
+                    <>{colorName(winnerId!, nameFor(winnerId!), state)} Wins!</>
+                  )}
+                </h1>
+              </div>
+              <div style={{ padding: '0 24px' }}>
                 {state.mode === 'lastStanding' ? <Lives state={state} displayName={nameFor} /> : <Leaderboard state={state} displayName={nameFor} />}
               </div>
               <button
@@ -936,7 +956,7 @@ export function OnlineGame({
                   cursor: 'pointer',
                 }}
               >
-                Back to Lobby
+                Play again
               </button>
             </div>
           )}

@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import type { GameState, PlayerId } from '../engine';
 import { theme } from '../theme';
 
@@ -49,12 +50,15 @@ const cell: React.CSSProperties = {
   padding: '0 var(--lb-cell-pad, 10px)',
 };
 
-// Two-line header: label on top, scoring delta beneath. Bottom-aligned so the
-// delta-less "Score" column sits level with the others' lower line.
+// One line per column, all five names on the same row. The scoring deltas used to
+// sit on a second line under three of the five, which left the header ragged: the
+// two columns with no delta ("Player", "Score") had to bottom-align into the delta
+// row, so whichever way they were aligned, one of them read as belonging to the
+// wrong row. The deltas now live behind the "?" beside the title, where they cost
+// a tap and stop distorting the header. See ScoringNote below.
 const headCell: React.CSSProperties = {
   display: 'flex',
-  flexDirection: 'column',
-  alignItems: 'flex-end',
+  alignItems: 'center',
   justifyContent: 'flex-end',
   padding: '0 var(--lb-cell-pad, 10px) 6px',
   color: theme.textMuted,
@@ -62,19 +66,15 @@ const headCell: React.CSSProperties = {
   fontSize: 'var(--lb-head-font, 12px)',
   lineHeight: 1.25,
   textTransform: 'uppercase',
-  letterSpacing: 0.4,
+  letterSpacing: 'var(--lb-head-tracking, 0.4px)',
 };
 
-function HeadCell({ label, delta }: { label: string; delta?: string }) {
-  return (
-    <div style={headCell}>
-      <span>{label}</span>
-      {delta && <span style={{ fontSize: 10, fontWeight: 400, letterSpacing: 0 }}>{delta}</span>}
-    </div>
-  );
+function HeadCell({ label }: { label: string }) {
+  return <div style={headCell}>{label}</div>;
 }
 
 export function Leaderboard({ state, displayName }: LeaderboardProps) {
+  const [showScoring, setShowScoring] = useState(false);
   const showScore = state.mode === 'deathmatch';
   const ids = state.turnOrder;
   const metricCount = 3 + (showScore ? 1 : 0);
@@ -107,7 +107,31 @@ export function Leaderboard({ state, displayName }: LeaderboardProps) {
       }}
     >
       <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 10 }}>
-        <h3 style={{ fontSize: 15, margin: 0 }}>Leaderboard</h3>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <h3 style={{ fontSize: 15, margin: 0 }}>Leaderboard</h3>
+          <button
+            onClick={() => setShowScoring((v) => !v)}
+            aria-expanded={showScoring}
+            aria-label={showScoring ? 'Hide how scoring works' : 'Show how scoring works'}
+            style={{
+              // 24px is the WCAG 2.2 pointer-target floor, and this control has
+              // clear space around it so the floor is the right size to hit.
+              width: 24,
+              height: 24,
+              padding: 0,
+              borderRadius: '50%',
+              background: showScoring ? theme.accentSoft : 'transparent',
+              border: `1px solid ${theme.border}`,
+              color: showScoring ? theme.accentText : theme.textMuted,
+              fontSize: 12,
+              fontWeight: 700,
+              lineHeight: 1,
+              cursor: 'pointer',
+            }}
+          >
+            ?
+          </button>
+        </div>
         {showScore && (
           <span style={{ fontSize: 12, fontWeight: 700, color: theme.accentText }}>
             Target: {state.targetScore}
@@ -116,10 +140,10 @@ export function Leaderboard({ state, displayName }: LeaderboardProps) {
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns }}>
-        <div style={{ ...headCell, alignItems: 'flex-start' }}>Player</div>
-        <HeadCell label="Kills" delta="+5" />
-        <HeadCell label="Deaths" delta="-3" />
-        <HeadCell label="Streak" delta="+1" />
+        <div style={{ ...headCell, justifyContent: 'flex-start' }}>Player</div>
+        <HeadCell label="Kills" />
+        <HeadCell label="Deaths" />
+        <HeadCell label="Streak" />
         {showScore && <HeadCell label="Score" />}
       </div>
 
@@ -163,7 +187,18 @@ export function Leaderboard({ state, displayName }: LeaderboardProps) {
         })}
       </div>
 
-      <div style={{ marginTop: 8, fontSize: 11, color: theme.textMuted }}>Streak = most consecutive turns alive</div>
+      {/* Both explanations sit together at the foot of the card. The streak line is
+          always on because "Streak" is the one column whose name does not say what
+          it counts; the scoring line is behind the "?" because it is read once and
+          then known. */}
+      <div style={{ marginTop: 8, fontSize: 11, color: theme.textMuted }}>
+        {showScoring && (
+          <div style={{ marginBottom: 4, color: theme.text }}>
+            +5 a kill, &minus;3 a death, +1 a streak
+          </div>
+        )}
+        Streak = most consecutive turns alive
+      </div>
     </div>
   );
 }
