@@ -333,6 +333,29 @@ button:disabled {
   }
 }
 
+/* The +5 / -3 that rises beside a leaderboard score when it changes. It holds
+   full opacity for the first third so the value is readable before it starts
+   leaving, rather than fading from the instant it appears. Duration is set in
+   JS (DELTA_MS in src/components/useScoreCounts.ts); keep the two in step. */
+@keyframes scoreDeltaRise {
+  0% {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  18% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  55% {
+    opacity: 1;
+    transform: translateY(-3px);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-12px);
+  }
+}
+
 /* ---- Game layout --------------------------------------------------------
    CSS owns WHERE the panels go; JS owns only the board's pixel cell size
    (src/layout/useBoardColumn.ts). Three arrangements:

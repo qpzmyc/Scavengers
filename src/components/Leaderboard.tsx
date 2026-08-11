@@ -1,6 +1,12 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import type { GameState, PlayerId } from '../engine';
 import { theme } from '../theme';
+import { DELTA_MS, useScoreCounts } from './useScoreCounts';
+
+// Green for a gain, red for a loss. Both are also player colours here, so the
+// sign carries the meaning on its own and the colour only reinforces it.
+const GAIN = '#4ade80';
+const LOSS = '#f87171';
 
 interface LeaderboardProps {
   state: GameState;
@@ -99,6 +105,20 @@ export function Leaderboard({ state, displayName, titledExternally }: Leaderboar
   });
   const rankOf = new Map<PlayerId, number>(ranked.map((id, i) => [id, i]));
 
+  // Memoised on the scores themselves so the hook's effect re-runs when a score
+  // moves, not on every unrelated re-render of the game.
+  const scoreKey = ids.map((id) => `${id}:${state.players[id].score}`).join(',');
+  const scores = useMemo(
+    () => new Map<PlayerId, number>(ids.map((id) => [id, state.players[id].score])),
+    // `scoreKey` is built from exactly the ids and scores this map is built from,
+    // so it changes whenever the map's contents would. Depending on `ids` and
+    // `state.players` instead would rebuild the map on every render of the game,
+    // which would restart the hook's effect and so restart every count.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [scoreKey],
+  );
+  const { displayed, deltas } = useScoreCounts(scores);
+
   return (
     <div
       style={{
@@ -185,7 +205,39 @@ export function Leaderboard({ state, displayName, titledExternally }: Leaderboar
               <div style={cell}>{p.kills}</div>
               <div style={cell}>{p.deaths}</div>
               <div style={cell}>{Math.max(p.longestStreak, p.currentStreak)}</div>
-              {showScore && <div style={cell}>{p.score}</div>}
+              {showScore && (
+                // `position: relative` so the delta can ride above the number
+                // without taking layout space and nudging the column.
+                <div style={{ ...cell, position: 'relative' }}>
+                  {displayed.get(id) ?? p.score}
+                  {(() => {
+                    const d = deltas.get(id);
+                    if (!d) return null;
+                    return (
+                      <span
+                        // Keyed by the delta's id so a second kill restarts the
+                        // animation instead of leaving the first one to finish.
+                        key={d.id}
+                        aria-hidden="true"
+                        style={{
+                          position: 'absolute',
+                          left: '100%',
+                          marginLeft: 4,
+                          fontSize: 11,
+                          fontWeight: 700,
+                          fontVariantNumeric: 'tabular-nums',
+                          whiteSpace: 'nowrap',
+                          pointerEvents: 'none',
+                          color: d.amount >= 0 ? GAIN : LOSS,
+                          animation: `scoreDeltaRise ${DELTA_MS}ms var(--ease-exit) forwards`,
+                        }}
+                      >
+                        {d.amount >= 0 ? `+${d.amount}` : d.amount}
+                      </span>
+                    );
+                  })()}
+                </div>
+              )}
             </div>
           );
         })}

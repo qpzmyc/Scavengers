@@ -44,19 +44,11 @@ _Empty._
   `src/components/ControlPanel.tsx` and the tile handlers in `src/App.tsx`.
   The equivalent swap for ATTACK aiming was considered and rejected — do not
   add it there.
-- **Count the leaderboard scores up, and show the delta on the row as it
-  happens.** `src/components/Leaderboard.tsx` already animates rows re-ranking
-  (`transform 0.45s`), but the score numbers jump. A +5 kill and a −3 death
-  currently look like identical instant changes, so the scoring rule reads
-  slower than it should. Must interrupt correctly if a second change lands
-  mid-count.
-  Do these two together, which was the user's explicit instruction: as well as
-  counting up, briefly show `+5` or `−3` on the player's own row at the moment
-  their score changes. That was chosen as the eventual home for the scoring
-  hints, which is why the static `+5 / −3 / +1` legend now sits behind the "?"
-  toggle beside the Leaderboard title rather than in the column header. Once
-  the live version exists, revisit whether the "?" legend is still earning its
-  place. Approved in the 2026-08-09 polish survey.
+- **Revisit whether the "?" scoring legend still earns its place.** The static
+  `+5 / −3 / +1` legend behind the "?" beside the Leaderboard title was always
+  meant to be provisional: the live `+5` deltas that now animate on the rows
+  were chosen as the real home for that information. Worth a look now that the
+  live version exists, rather than leaving both.
 - **Make the online lobby's empty seat look live.** "Waiting for player…" in
   `src/online/OnlineSession.tsx` is a static grey box that never changes, so a
   host cannot tell the room is still open or how long they have waited. Adding
@@ -70,6 +62,25 @@ _Empty._
   them — a real attempt needs a scripted harness, not manual clicking.
 
 ## Recently Done
+
+- **Leaderboard scores count up, with a rising `+5` / `−3` beside them.** The
+  count runs 450ms to match the row re-rank, so the number lands as the row
+  settles. The interrupt case (a second kill landing mid-count) is the part
+  worth getting right and it lives in `src/components/scoreCount.ts` as pure
+  functions over a clock, with 17 tests: the new count starts from the value
+  currently on screen rather than the old starting value, which is what stops
+  the number snapping backwards. Confirmed by temporarily reverting that and
+  watching three tests fail with "expected 0 to be 3". `useScoreCounts` supplies
+  the clock with one frame loop for the whole table that stops itself once every
+  score settles. The delta is green up, red down; both are also player colours,
+  so the sign carries the meaning and the colour only reinforces it.
+  Not verified: the count sweeping and the delta rising as continuous motion.
+  The browser pane runs almost no `requestAnimationFrame` callbacks unless it is
+  painting, and each screenshot flushes the whole queue at once, so the 450ms
+  window cannot be watched there. What was seen in the real game is the delta
+  rendering with the right sign and colour, its keyframe running with opacity
+  ramping from 0, and the displayed number sitting at 5 while its target was 6.
+  The keyframe itself was checked by scrubbing it to six points.
 
 - **Two deduplications, no behavior change.** The ResizeObserver plumbing shared
   by `useBoardColumn` and `useElementWidth` moved into `src/layout/useObservedBox.ts`,
