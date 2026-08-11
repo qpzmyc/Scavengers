@@ -294,8 +294,29 @@ export function OnlineSession({
                   background: theme.surfaceAlt,
                   color: theme.textMuted,
                   fontWeight: 600,
+                  // Same gap as a filled row's dot-to-name spacing, so the marker
+                  // below lands in the same column as the real colour dots.
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 10,
                 }}
               >
+                {/* Sits exactly where the joining player's colour dot will be, so
+                    the row reads as a seat someone is about to take rather than a
+                    dead box. Decorative: the text beside it already says what this
+                    is, so a screen reader gains nothing from announcing it. */}
+                <span
+                  aria-hidden="true"
+                  style={{
+                    width: 14,
+                    height: 14,
+                    borderRadius: '50%',
+                    border: `1.5px dashed ${theme.textMuted}`,
+                    boxSizing: 'border-box',
+                    flexShrink: 0,
+                    animation: 'seatSlotWait 2.4s linear infinite',
+                  }}
+                />
                 Waiting for player…
               </div>
             );

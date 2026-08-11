@@ -49,12 +49,6 @@ _Empty._
   meant to be provisional: the live `+5` deltas that now animate on the rows
   were chosen as the real home for that information. Worth a look now that the
   live version exists, rather than leaving both.
-- **Make the online lobby's empty seat look live.** "Waiting for player…" in
-  `src/online/OnlineSession.tsx` is a static grey box that never changes, so a
-  host cannot tell the room is still open or how long they have waited. Adding
-  a timeout was considered and rejected — the room should keep waiting
-  indefinitely; this is about showing that it is waiting. Approved in the
-  2026-08-09 polish survey.
 - **Runtime verification for the two online animation races.** The ordering
   logic is covered by `src/online/transition.test.ts`, but the races have
   never been exercised against two live clients. The browser pane throttles
@@ -62,6 +56,19 @@ _Empty._
   them — a real attempt needs a scripted harness, not manual clicking.
 
 ## Recently Done
+
+- **The lobby's empty seat now shows the room is still open.** A dashed ring
+  sits exactly where the joining player's colour dot will appear (measured: the
+  same x as the filled row's dot), turning once every 2.4s and breathing as it
+  goes, so the row reads as a seat about to be taken rather than a dead box.
+  Chosen from three directions that varied where the motion lived: on the
+  message, across the whole seat, or on the empty slot. Rotation and scale share
+  one keyframe because two animations would both drive `transform` and the
+  second would win. No countdown or elapsed timer, deliberately: an elapsed
+  counter was the obvious fourth option and was left out because it turns an
+  open-ended wait into something being measured, which is the pressure the
+  already-rejected timeout would have created. The marker is `aria-hidden`,
+  since the text beside it already says what the row is.
 
 - **Leaderboard scores count up, with a rising `+5` / `−3` beside them.** The
   count runs 450ms to match the row re-rank, so the number lands as the row

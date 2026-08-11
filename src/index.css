@@ -333,6 +333,36 @@ button:disabled {
   }
 }
 
+/* The empty lobby seat's marker: a dashed ring sitting where the joining
+   player's colour dot will appear, turning slowly and breathing so the seat
+   reads as still listening rather than stalled. Rotation and scale share one
+   keyframe on purpose — as two separate animations they would both drive
+   `transform` and the second would simply win. Linear so the turn stays even;
+   the opacity and scale steps supply the breathing. No countdown, deliberately:
+   the room waits indefinitely. */
+@keyframes seatSlotWait {
+  0% {
+    opacity: 0.4;
+    transform: rotate(0deg) scale(0.85);
+  }
+  25% {
+    opacity: 0.8;
+    transform: rotate(90deg) scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: rotate(180deg) scale(1.06);
+  }
+  75% {
+    opacity: 0.8;
+    transform: rotate(270deg) scale(1);
+  }
+  100% {
+    opacity: 0.4;
+    transform: rotate(360deg) scale(0.85);
+  }
+}
+
 /* The +5 / -3 that rises beside a leaderboard score when it changes. It holds
    full opacity for the first third so the value is readable before it starts
    leaving, rather than fading from the instant it appears. Duration is set in
