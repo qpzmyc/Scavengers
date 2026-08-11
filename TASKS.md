@@ -23,13 +23,6 @@ _Empty._
   either moving those inline styles into CSS classes or giving hover a property
   that is not set inline.
 
-- **Deduplicate the layout hooks.** `useBoardColumn` and `useElementWidth`
-  (`src/layout/`) are roughly 85% the same code. Collapse into one hook.
-  Refactor only, no behavior change; the existing suite guards it.
-- **Deduplicate the game shell wrappers.** The kills feed and the controls
-  wrapper are written twice, once in `src/App.tsx` and once in
-  `src/online/OnlineGame.tsx`. Both already render through `GameLayout`, so
-  the shared pieces can move up.
 
 ## Deferred / Needs Planning
 
@@ -77,6 +70,19 @@ _Empty._
   them — a real attempt needs a scripted harness, not manual clicking.
 
 ## Recently Done
+
+- **Two deduplications, no behavior change.** The ResizeObserver plumbing shared
+  by `useBoardColumn` and `useElementWidth` moved into `src/layout/useObservedBox.ts`,
+  which now carries the load-bearing explanation of why these have to be callback
+  refs. Each hook keeps only its own derivation. The one contract to know is that
+  the `onBox` callback must be identity-stable, since an unstable one rebuilds the
+  observer every render. The controls card and the kills panel moved from both
+  `App.tsx` and `OnlineGame.tsx` into `GameLayout`, which now owns the shared
+  `panel` style and the "Kills" heading and takes a `controlsWidth` prop; callers
+  pass contents only. That made each file's local `card` object dead, so both were
+  removed. Verified by measuring the hotseat layout before and after (controls slot
+  239x790, board wrapper 865x671, bars 660x103, card styling identical). The online
+  screen was changed identically but only typechecked, not exercised at runtime.
 
 - **The board no longer resizes on a phase change.** The replay banner replaced
   ResourceBars and was ~55px shorter, and both share `.game-layout__center` with

@@ -702,12 +702,6 @@ export function OnlineGame({
     (flow.kind === 'attackTarget' && flow.target !== null) ||
     flow.kind === 'rest';
 
-  const card: React.CSSProperties = {
-    background: theme.surface,
-    border: `1px solid ${theme.border}`,
-    borderRadius: theme.radius,
-    boxShadow: theme.shadow,
-  };
   // Most recent kill for the phone strip's mini tracker — reuses the same
   // viewer-aware describe()/reflexive() wording as the last row of the full
   // kills feed below, just not wrapped in its own row.
@@ -1042,8 +1036,9 @@ export function OnlineGame({
             visionCenter={interactive ? me.position : undefined}
           />
         }
+        controlsWidth={controlsWidth}
         controls={
-          <div style={{ ...card, width: controlsWidth, boxSizing: 'border-box' }}>
+          <>
             {revealing ? (
               <div style={{ padding: 16, color: theme.textMuted, fontStyle: 'italic' }}>Choosing first turn…</div>
             ) : statusText ? (
@@ -1063,14 +1058,9 @@ export function OnlineGame({
                 maxMoveTiles={maxMoveTiles}
               />
             )}
-          </div>
+          </>
         }
-        killsFeed={
-          <div style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: theme.radius, boxShadow: theme.shadow, padding: 'var(--kills-pad, 16px)', minWidth: 240, boxSizing: 'border-box' }}>
-            <h3 style={{ marginBottom: 10, fontSize: 15 }}>Kills</h3>
-            {killsList}
-          </div>
-        }
+        killsFeed={killsList}
       />
       {phonePanel === 'standings' && (
         <Modal title={standingsLabel(state.mode)} onClose={() => setPhonePanel(null)}>

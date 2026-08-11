@@ -1013,12 +1013,6 @@ function App() {
     (flow.kind === 'attackTarget' && flow.target !== null) ||
     flow.kind === 'rest';
 
-  const card: React.CSSProperties = {
-    background: theme.surface,
-    border: `1px solid ${theme.border}`,
-    borderRadius: theme.radius,
-    boxShadow: theme.shadow,
-  };
   // Ephemeral sliding toast stack — fixed to the top of the viewport so it renders
   // consistently across every phase/screen. Newest notice is prepended, so it
   // appears at the top and pushes earlier ones down, like a real notification feed.
@@ -1365,8 +1359,9 @@ function App() {
             visionCenter={interactive ? me.position : undefined}
           />
         }
+        controlsWidth={controlsWidth}
         controls={
-          <div style={{ ...card, width: controlsWidth, boxSizing: 'border-box' }}>
+          <>
             {phase === 'result' ? (
               <div style={{ padding: 16, color: theme.textMuted, fontStyle: 'italic' }}>Resolving…</div>
             ) : phase === 'replaying' ? (
@@ -1386,14 +1381,9 @@ function App() {
                 maxMoveTiles={maxMoveTiles}
               />
             )}
-          </div>
+          </>
         }
-        killsFeed={
-          <div style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: theme.radius, boxShadow: theme.shadow, padding: 'var(--kills-pad, 16px)', minWidth: 240, boxSizing: 'border-box' }}>
-            <h3 style={{ marginBottom: 10, fontSize: 15 }}>Kills</h3>
-            {killsList}
-          </div>
-        }
+        killsFeed={killsList}
       />
       {phonePanel === 'standings' && (
         <Modal title={standingsLabel(state.mode)} onClose={() => setPhonePanel(null)}>

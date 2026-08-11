@@ -1,4 +1,16 @@
-import type { ReactNode, Ref } from 'react';
+import type { CSSProperties, ReactNode, Ref } from 'react';
+import { theme } from '../theme';
+
+// The panel look shared by the controls column and the kills feed. Both wrappers
+// used to be written out identically in App.tsx and OnlineGame.tsx; they live
+// here now so the two screens cannot drift apart.
+const panel: CSSProperties = {
+  background: theme.surface,
+  border: `1px solid ${theme.border}`,
+  borderRadius: theme.radius,
+  boxShadow: theme.shadow,
+  boxSizing: 'border-box',
+};
 
 interface GameLayoutProps {
   title: ReactNode;
@@ -19,11 +31,13 @@ interface GameLayoutProps {
   board: ReactNode;
   /** Attach the ref from useBoardColumn — this wrapper is the measured element. */
   boardRef: Ref<HTMLDivElement>;
-  /** ControlPanel, or its "Resolving…" / replay placeholder. */
+  /** ControlPanel, or its "Resolving…" / replay placeholder. Wrapped in the card here. */
   controls: ReactNode;
   /** Attach the ref from useElementWidth — this wrapper is the measured element. */
   controlsRef: Ref<HTMLDivElement>;
-  /** Kills notification panel. Hidden under the phone breakpoint. */
+  /** Width for the controls card, from useElementWidth measuring `controlsRef`. */
+  controlsWidth: number;
+  /** The kills list itself. The panel and its heading are supplied here. */
   killsFeed: ReactNode;
 }
 
@@ -37,6 +51,7 @@ export function GameLayout({
   boardRef,
   controls,
   controlsRef,
+  controlsWidth,
   killsFeed,
 }: GameLayoutProps) {
   return (
@@ -58,9 +73,14 @@ export function GameLayout({
         </div>
       </div>
       <div className="game-layout__controls" ref={controlsRef}>
-        {controls}
+        <div style={{ ...panel, width: controlsWidth }}>{controls}</div>
       </div>
-      <div className="game-layout__kills">{killsFeed}</div>
+      <div className="game-layout__kills">
+        <div style={{ ...panel, padding: 'var(--kills-pad, 16px)', minWidth: 240 }}>
+          <h3 style={{ marginBottom: 10, fontSize: 15 }}>Kills</h3>
+          {killsFeed}
+        </div>
+      </div>
     </div>
   );
 }
