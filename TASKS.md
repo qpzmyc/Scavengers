@@ -49,6 +49,12 @@ _Empty._
   meant to be provisional: the live `+5` deltas that now animate on the rows
   were chosen as the real home for that information. Worth a look now that the
   live version exists, rather than leaving both.
+- **The `decluttering-game-ui` pass owed on the two new animations.**
+  `designing-game-ui` chains decluttering as a final pass once something is
+  built, and it was skipped for both the leaderboard count-up/deltas and the
+  lobby waiting seat. Neither has been looked at with fresh eyes for whether the
+  motion is doing too much beside a table that also re-ranks itself. Skipped
+  knowingly, not forgotten.
 - **Runtime verification for the two online animation races.** The ordering
   logic is covered by `src/online/transition.test.ts`, but the races have
   never been exercised against two live clients. The browser pane throttles
