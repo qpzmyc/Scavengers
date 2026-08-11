@@ -4,7 +4,7 @@
 // `wrangler dev` process instead. Override either via VITE_PARTY_HOST.
 export const PARTY_HOST: string =
   (import.meta.env.VITE_PARTY_HOST as string | undefined) ??
-  (import.meta.env.DEV ? '127.0.0.1:8790' : window.location.host);
+  (import.meta.env.DEV ? '127.0.0.1:10501' : window.location.host);
 
 export const ROOM_PARTY = 'scavengers-server';
 export const LOBBY_PARTY = 'lobby-server';

@@ -5,7 +5,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Commands
 
 ```bash
-npm run dev        # Vite dev server (http://localhost:5180 via .claude/launch.json; bare `vite` still defaults to 5173)
+npm run dev        # Vite dev server (http://localhost:10500 via .claude/launch.json; bare `vite` still defaults to 5173)
 npm run build      # tsc -b (typecheck) + vite build
 npm run test       # Run the full Vitest suite once
 npm run lint       # oxlint
@@ -15,6 +15,11 @@ npx vitest run src/engine/combat.test.ts          # Run one test file
 npx vitest run -t "carries an active phantom"      # Run tests matching a name
 npx vitest                                          # Watch mode
 ```
+
+**Ports:** this project owns block **105**, ports **10500-10599**. The Vite dev
+server is 10500 and the game server in `server/` is 10501. Any additional
+server goes inside the block; never pick a port outside it. Scheme and the
+full registry of which project owns what: `~/.claude/port-registry.md`.
 
 TypeScript is strict with `verbatimModuleSyntax` and `noUnusedLocals` on: type-only imports **must** use `import type`, and unused locals fail the build. `npm run build` is the real gate — run it, not just tests.
 

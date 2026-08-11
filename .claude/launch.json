@@ -4,15 +4,17 @@
     {
       "name": "scavengers-dev",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev", "--", "--port", "5180", "--strictPort"],
-      "port": 5180
+      "runtimeArgs": ["run", "dev", "--", "--port", "10500", "--strictPort"],
+      "port": 10500,
+      "autoPort": false
     },
     {
       "name": "scavengers-server",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev", "--", "--port", "8790"],
+      "runtimeArgs": ["run", "dev", "--", "--port", "10501"],
       "cwd": "server",
-      "port": 8790
+      "port": 10501,
+      "autoPort": false
     }
   ]
 }
