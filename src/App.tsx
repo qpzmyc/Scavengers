@@ -45,6 +45,7 @@ import { useBoardColumn } from './layout/useBoardColumn';
 import { useElementWidth } from './layout/useElementWidth';
 import { GameLayout } from './components/GameLayout';
 import { ScoreStrip } from './components/ScoreStrip';
+import { standingsLabel } from './components/standingsLabel';
 import { Modal } from './components/Modal';
 import {
   type AnimFrame,
@@ -1378,8 +1379,10 @@ function App() {
         }
       />
       {phonePanel === 'standings' && (
-        <Modal title="Standings" onClose={() => setPhonePanel(null)}>
-          {state.mode === 'lastStanding' ? <Lives state={state} /> : <Leaderboard state={state} />}
+        <Modal title={standingsLabel(state.mode)} onClose={() => setPhonePanel(null)}>
+          {state.mode === 'lastStanding'
+            ? <Lives state={state} titledExternally />
+            : <Leaderboard state={state} titledExternally />}
         </Modal>
       )}
       {phonePanel === 'kills' && (

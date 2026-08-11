@@ -9,14 +9,7 @@ _Nothing in flight — `feat/phantom-destroyer-move-ux-fixes` merged to `main` 2
 
 ## Small Changes
 
-- **Shrink a long player name instead of letting it crowd the edit button.**
-  In the online lobby's player row (`src/online/OnlineSession.tsx`), a
-  16-character name — the maximum `maxLength` allows — ends exactly flush
-  against the pencil/edit button with a 0px gap. Measured at 381px and 396px
-  viewport: it touches but does not overlap, and the page does not scroll
-  sideways, so this is spacing rather than a break. Approved fix is to reduce
-  the name's font size as it gets longer rather than truncate it, so the whole
-  name stays readable. Approved in the 2026-08-09 polish survey.
+_Empty._
 
 ## Backlog / Ideas
 
@@ -26,12 +19,6 @@ _Nothing in flight — `feat/phantom-destroyer-move-ux-fixes` merged to `main` 2
   navigating by keyboard or gamepad moves through the game blind. Found during
   the 2026-08-09 polish survey; designing the two states is a taste call that
   affects every control, so it needs a decision rather than a quick patch.
-- **The shared Modal has no Escape-to-close and no focus trap.**
-  `src/components/Modal.tsx` closes on scrim click and on its × button only.
-  Every popup in the game uses it.
-- **The standings table is called two things.** The modal is titled
-  "Standings", the card inside it and the phone score strip both say
-  "Leaderboard". One concept, two names, one nested inside the other.
 
 - **Deduplicate the layout hooks.** `useBoardColumn` and `useElementWidth`
   (`src/layout/`) are roughly 85% the same code. Collapse into one hook.
@@ -90,6 +77,27 @@ _Nothing in flight — `feat/phantom-destroyer-move-ux-fixes` merged to `main` 2
   them — a real attempt needs a scripted harness, not manual clicking.
 
 ## Recently Done
+
+- **Three quick wins: modal keyboard support, table naming, long lobby names.**
+  Modal now closes on Escape, confines Tab to the panel, and hands focus back to
+  whatever opened it. That last part needed the opener captured in a `useState`
+  initializer rather than an effect: `TextInputPopup`'s input has `autoFocus`,
+  which React applies during commit, so an effect reading `document.activeElement`
+  saw the modal's own input and "restored" focus to a detached node, dropping it
+  onto `<body>`. Escape maps to `onCancel` on `ConfirmDialog`, so it cancels
+  rather than confirms.
+  The standings table is now named per mode ("Leaderboard" in deathmatch,
+  "Lives" in survival) across the phone strip's card label and the modal title;
+  the strip previously said "Leaderboard" in both modes, putting that word over a
+  row of hearts. `Leaderboard` and `Lives` take a `titledExternally` prop so
+  their own heading disappears when a Modal title already names them.
+  Long lobby names step down 15 / 13.5 / 12px past 11 and 13 characters. The
+  font shrink alone did **not** fix the crowding — the lobby panel is
+  content-sized, so shrinking the text shrank the panel too and left a 1.8px
+  gap. The row needed an explicit `gap: 14` to hold the name off the button; the
+  font step-down is what keeps the panel from widening to 366px of a 375px
+  viewport to pay for it. Measured live at 375px: 14px gap, 322px panel, no
+  sideways scroll.
 
 - **Polish pass: modals, standings header, win screen.** Popups now rise into
   place instead of appearing instantly, using two new shared easing tokens

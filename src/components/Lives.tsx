@@ -6,9 +6,12 @@ interface LivesProps {
   // Overrides the color-based label per player (e.g. a custom online display name).
   // Falls back to color.toUpperCase() when omitted (hotseat's call sites omit it).
   displayName?: (id: PlayerId) => string;
+  // Set when a Modal title already names this table, so the word doesn't appear
+  // twice a few pixels apart.
+  titledExternally?: boolean;
 }
 
-export function Lives({ state, displayName }: LivesProps) {
+export function Lives({ state, displayName, titledExternally }: LivesProps) {
   const players = state.turnOrder.map((id) => state.players[id]);
 
   return (
@@ -22,7 +25,7 @@ export function Lives({ state, displayName }: LivesProps) {
         minWidth: 240,
       }}
     >
-      <h3 style={{ marginBottom: 10, fontSize: 15 }}>Lives</h3>
+      {!titledExternally && <h3 style={{ marginBottom: 10, fontSize: 15 }}>Lives</h3>}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
         {players.map((p) => {
           const remaining = Math.max(0, state.deathCap - p.deaths);

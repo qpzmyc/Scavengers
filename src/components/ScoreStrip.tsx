@@ -1,6 +1,7 @@
 import type { CSSProperties, ReactNode } from 'react';
 import type { GameState } from '../engine';
 import { theme } from '../theme';
+import { standingsLabel } from './standingsLabel';
 
 interface ScoreStripProps {
   state: GameState;
@@ -28,7 +29,9 @@ export function ScoreStrip({ state, onOpenStandings, onOpenKills, lastKill }: Sc
     // (see the 768-847px block in src/index.css).
     <div style={{ display: 'flex', flexDirection: 'var(--strip-dir, column)' as CSSProperties['flexDirection'], gap: 8 }}>
       <div style={card}>
-        <span style={cardLabel}>Leaderboard</span>
+        {/* Names what this card actually shows. It used to say "Leaderboard" in
+            both modes, which put that word over a row of hearts in survival. */}
+        <span style={cardLabel}>{standingsLabel(state.mode)}</span>
         {/* Own row, full strip width. Sharing this row with the kill tracker (the
             old layout) is what squeezed 4 players out of a real 375px phone;
             the tracker now lives in its own card below.

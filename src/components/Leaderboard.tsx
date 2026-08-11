@@ -7,6 +7,10 @@ interface LeaderboardProps {
   // Overrides the color-based label per player (e.g. a custom online display name).
   // Falls back to color.toUpperCase() when omitted (hotseat's call sites omit it).
   displayName?: (id: PlayerId) => string;
+  // Set when a Modal title already names this table, so the word doesn't appear
+  // twice a few pixels apart. The rest of the header row (the "?" toggle and the
+  // target score) stays either way — only the heading text goes.
+  titledExternally?: boolean;
 }
 
 // Row height so rows can be absolutely positioned and slide (transform) between
@@ -73,7 +77,7 @@ function HeadCell({ label }: { label: string }) {
   return <div style={headCell}>{label}</div>;
 }
 
-export function Leaderboard({ state, displayName }: LeaderboardProps) {
+export function Leaderboard({ state, displayName, titledExternally }: LeaderboardProps) {
   const [showScoring, setShowScoring] = useState(false);
   const showScore = state.mode === 'deathmatch';
   const ids = state.turnOrder;
@@ -108,7 +112,7 @@ export function Leaderboard({ state, displayName }: LeaderboardProps) {
     >
       <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 10 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <h3 style={{ fontSize: 15, margin: 0 }}>Leaderboard</h3>
+          {!titledExternally && <h3 style={{ fontSize: 15, margin: 0 }}>Leaderboard</h3>}
           <button
             onClick={() => setShowScoring((v) => !v)}
             aria-expanded={showScoring}

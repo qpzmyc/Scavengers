@@ -22,6 +22,15 @@ import { getSavedPlayerName, setSavedPlayerName } from './playerName';
 
 // A player's display label in the lobby: their custom name, or their color capitalized
 // as a default (without marking a name as "set" — the rename field stays empty for them).
+// A 16-character name (the rename field's maxLength) rendered at the row's normal
+// 15px ends flush against the edit button with no gap left. Stepping the size down
+// past 11 characters buys that gap back while keeping the whole name readable,
+// which is why this shrinks rather than truncating.
+function nameFontSize(label: string): number {
+  if (label.length <= 11) return 15;
+  return label.length <= 13 ? 13.5 : 12;
+}
+
 function labelFor(name: string | null, color: string): string {
   if (name) return name;
   return color.toUpperCase();
@@ -306,15 +315,25 @@ export function OnlineSession({
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'space-between',
+                // The lobby panel is sized by its content, so `space-between`
+                // never has spare room to distribute and a long name ends up
+                // touching the button. This gap is what actually holds them
+                // apart; nameFontSize above is what stops the panel widening to
+                // pay for it (at 15px the row needs 366 of a 375px viewport).
+                gap: 14,
               }}
             >
-              <span style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              {/* minWidth:0 lets this half of the row give way rather than push
+                  the button off the edge, whatever the font size works out to. */}
+              <span style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
                 <span
                   aria-label={entry.color}
                   style={{ width: 14, height: 14, borderRadius: '50%', background: entry.color, flexShrink: 0 }}
                 />
                 {entry.isHost && <span aria-label="host" title="Host">👑</span>}
-                <span>{labelFor(entry.name, entry.color)}</span>
+                <span style={{ fontSize: nameFontSize(labelFor(entry.name, entry.color)) }}>
+                  {labelFor(entry.name, entry.color)}
+                </span>
               </span>
               {isMe ? (
                 <button

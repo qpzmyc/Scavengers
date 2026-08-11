@@ -29,6 +29,7 @@ import { Lives } from '../components/Lives';
 import { ControlPanel, type Flow, type AttackType, type Capabilities } from '../components/ControlPanel';
 import { GameLayout } from '../components/GameLayout';
 import { ScoreStrip } from '../components/ScoreStrip';
+import { standingsLabel } from '../components/standingsLabel';
 import { Modal } from '../components/Modal';
 import { useBoardColumn } from '../layout/useBoardColumn';
 import { useElementWidth } from '../layout/useElementWidth';
@@ -1072,8 +1073,10 @@ export function OnlineGame({
         }
       />
       {phonePanel === 'standings' && (
-        <Modal title="Standings" onClose={() => setPhonePanel(null)}>
-          {state.mode === 'lastStanding' ? <Lives state={state} displayName={nameFor} /> : <Leaderboard state={state} displayName={nameFor} />}
+        <Modal title={standingsLabel(state.mode)} onClose={() => setPhonePanel(null)}>
+          {state.mode === 'lastStanding'
+            ? <Lives state={state} displayName={nameFor} titledExternally />
+            : <Leaderboard state={state} displayName={nameFor} titledExternally />}
         </Modal>
       )}
       {phonePanel === 'kills' && (
