@@ -1,6 +1,27 @@
-import { useEffect, useRef, useState } from 'react';
-import type { PlayerId } from '../engine';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import type { GameState, PlayerId } from '../engine';
 import { COUNT_MS, countValue, isDone, retarget, settled, type Count } from './scoreCount';
+
+/**
+ * The id-to-score map `useScoreCounts` takes, memoised on the scores themselves
+ * so the hook's effect re-runs when a score moves rather than on every unrelated
+ * re-render of the game. Depending on `state.players` instead would rebuild the
+ * map every render, restarting the effect and so restarting every count.
+ *
+ * Shared because both the Leaderboard and the phone ScoreStrip need the same map
+ * built the same way; two copies of this would drift.
+ */
+export function useScoreMap(state: GameState): ReadonlyMap<PlayerId, number> {
+  const ids = state.turnOrder;
+  const scoreKey = ids.map((id) => `${id}:${state.players[id].score}`).join(',');
+  return useMemo(
+    () => new Map<PlayerId, number>(ids.map((id) => [id, state.players[id].score])),
+    // `scoreKey` is built from exactly the ids and scores this map is built from,
+    // so it changes whenever the map's contents would.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [scoreKey],
+  );
+}
 
 /** What a player's score just did, for the rising +5 / -3 beside the number. */
 export interface ScoreDelta {
@@ -9,10 +30,12 @@ export interface ScoreDelta {
   readonly id: number;
 }
 
-// How long the delta takes to rise and fade. Roughly twice the count, so it is
-// still on screen as the number finishes climbing. Keep in step with the
-// `scoreDeltaRise` keyframe duration in src/index.css.
-export const DELTA_MS = 900;
+// How long the delta and the row wash stay up: 150ms in, 1500ms held, 500ms out.
+// The old 900ms held full opacity for only about a third of a second, which was
+// not long enough to notice, let alone read. Keep in step with the
+// `scoreDeltaRise` and `scoreRowWash` keyframe durations in src/index.css, which
+// read it back through the `--score-delta-ms` custom property.
+export const DELTA_MS = 2150;
 
 /**
  * Drives every player's score number toward its real value and reports what

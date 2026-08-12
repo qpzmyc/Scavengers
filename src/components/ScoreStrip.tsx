@@ -1,7 +1,12 @@
 import type { CSSProperties, ReactNode } from 'react';
 import type { GameState } from '../engine';
 import { theme } from '../theme';
+import { GAIN_WASH, LOSS_WASH } from './Leaderboard';
 import { standingsLabel } from './standingsLabel';
+import { DELTA_MS, useScoreCounts, useScoreMap } from './useScoreCounts';
+
+const GAIN = '#4ade80';
+const LOSS = '#f87171';
 
 interface ScoreStripProps {
   state: GameState;
@@ -21,6 +26,13 @@ interface ScoreStripProps {
  */
 export function ScoreStrip({ state, onOpenStandings, onOpenKills, lastKill }: ScoreStripProps) {
   const showScore = state.mode === 'deathmatch';
+  // The strip is the standings readout a phone player actually watches, and it
+  // used to change its number with nothing to say it had. It gets the same
+  // treatment as a leaderboard row: the chip fills with the player's gain or
+  // loss colour and the amount appears beside it. This is also where the phone
+  // reads the value at all, since the standings modal has no width for the
+  // delta track (see --lb-delta-col in src/index.css).
+  const { displayed, deltas } = useScoreCounts(useScoreMap(state));
 
   return (
     // Stacked by default. Narrow-landscape puts the strip in a full-width row
@@ -50,16 +62,53 @@ export function ScoreStrip({ state, onOpenStandings, onOpenKills, lastKill }: Sc
           {state.turnOrder.map((id) => {
             const p = state.players[id];
             const remaining = Math.max(0, state.deathCap - p.deaths);
+            const delta = showScore ? deltas.get(id) : undefined;
             return (
-              <span key={id} style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0, opacity: p.eliminated ? 0.4 : 1 }}>
+              <span key={id} style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0, opacity: p.eliminated ? 0.4 : 1 }}>
+                {delta && (
+                  <span
+                    key={`wash-${delta.id}`}
+                    aria-hidden="true"
+                    className="strip-chip-wash"
+                    style={{
+                      '--wash': delta.amount >= 0 ? GAIN_WASH : LOSS_WASH,
+                      '--score-delta-ms': `${DELTA_MS}ms`,
+                    } as CSSProperties}
+                  />
+                )}
                 {/* Classed so the narrow-landscape arrangement can drop it in
                     survival, where the heart beside it already carries this
                     exact colour. See the `[data-standings='lives']` rule in the
                     compact landscape block in src/index.css. */}
                 <span className="strip-chip-dot" style={{ width: 10, height: 10, borderRadius: '50%', background: p.color, display: 'inline-block' }} />
                 {showScore ? (
-                  <span style={{ fontSize: 14, fontWeight: 600, fontVariantNumeric: 'tabular-nums', color: theme.text }}>
-                    {p.score}
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+                    <span style={{ fontSize: 14, fontWeight: 600, fontVariantNumeric: 'tabular-nums', color: theme.text }}>
+                      {displayed.get(id) ?? p.score}
+                    </span>
+                    {/* Always rendered, so the strip keeps one width whether or not
+                        anyone has just scored. Letting it appear and vanish would
+                        re-flow the row, which is the same shift the leaderboard's
+                        reserved track exists to avoid. 15px fits "+10" and "-10"
+                        at this size; wider values ellipsise rather than push. */}
+                    <span style={{ minWidth: 15, display: 'flex', justifyContent: 'flex-start', overflow: 'hidden' }}>
+                      {delta && (
+                        <span
+                          key={delta.id}
+                          aria-hidden="true"
+                          style={{
+                            fontSize: 10,
+                            fontWeight: 700,
+                            fontVariantNumeric: 'tabular-nums',
+                            whiteSpace: 'nowrap',
+                            color: delta.amount >= 0 ? GAIN : LOSS,
+                            animation: `scoreDeltaRise ${DELTA_MS}ms var(--ease-exit) forwards`,
+                          }}
+                        >
+                          {delta.amount >= 0 ? `+${delta.amount}` : delta.amount}
+                        </span>
+                      )}
+                    </span>
                   </span>
                 ) : (
                   <span style={{ display: 'flex', alignItems: 'center', gap: 2, fontSize: 13 }}>

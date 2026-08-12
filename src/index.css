@@ -41,6 +41,11 @@
      what all-caps wants when there is room for it. */
   --lb-head-tracking: 0.4px;
   --lb-value-font: calc(16 * var(--ui-unit));
+  /* Reserved track at the end of each row holding the +5 / -3. It is permanent
+     rather than conjured when a score changes, so the number has somewhere to
+     appear that is inside the card and no column shifts when it arrives. The
+     cost is this much card width sitting empty whenever nobody has just scored. */
+  --lb-delta-col: calc(30 * var(--ui-unit));
   /* Row height for Leaderboard.tsx's absolutely-positioned, rank-animated rows.
      JS only ever multiplies this by `rank`/`ids.length` inside calc() — the
      actual pixel value lives here so it scales with everything else. */
@@ -363,27 +368,73 @@ button:disabled {
   }
 }
 
-/* The +5 / -3 that rises beside a leaderboard score when it changes. It holds
-   full opacity for the first third so the value is readable before it starts
-   leaving, rather than fading from the instant it appears. Duration is set in
-   JS (DELTA_MS in src/components/useScoreCounts.ts); keep the two in step. */
+/* The +5 / -3 shown beside a leaderboard score when it changes.
+
+   It used to drift upward from `left: 100%` of the Score cell. Score is the last
+   column, so the chip landed in the card's padding and then crossed the border:
+   measured on the running game, the card's right edge sat at 470px and the "+6"
+   ran 457px to 472px. It now sits in a reserved track inside the card (see
+   --lb-delta-col) and stays put, so the only motion left is the fade.
+
+   Timing is a plateau rather than a drift. Of the old 900ms only ~330ms was at
+   full opacity, which was not long enough to read. The hold is now 1.5s:
+   150ms in, 1500ms held, 500ms out. Duration is also set in JS (DELTA_MS in
+   src/components/useScoreCounts.ts); keep the two in step. */
 @keyframes scoreDeltaRise {
   0% {
     opacity: 0;
-    transform: translateY(4px);
+    transform: translateY(3px);
   }
-  18% {
+  7% {
     opacity: 1;
     transform: translateY(0);
   }
-  55% {
+  77% {
     opacity: 1;
-    transform: translateY(-3px);
+    transform: translateY(0);
   }
   100% {
     opacity: 0;
-    transform: translateY(-12px);
+    transform: translateY(-5px);
   }
+}
+
+/* The row behind that number fills with the player's gain or loss colour for as
+   long as the number is up. The colour is what carries across the screen, so a
+   player looking at the board still registers that the standings moved. Runs on
+   the same clock as scoreDeltaRise so the two start and finish together. */
+@keyframes scoreRowWash {
+  0% {
+    opacity: 0;
+  }
+  7% {
+    opacity: 1;
+  }
+  77% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+/* Sits inside the row (which is already positioned for rank animation) and is
+   keyed by the delta id, so a second kill restarts the wash instead of letting
+   the first one finish. Inset horizontally past the cell padding so the fill
+   reaches the card's inner edges rather than stopping at the first column. */
+.lb-row-wash,
+.strip-chip-wash {
+  position: absolute;
+  inset: 0;
+  border-radius: 5px;
+  background: var(--wash);
+  opacity: 0;
+  pointer-events: none;
+  animation: scoreRowWash var(--score-delta-ms, 2150ms) linear forwards;
+}
+
+.lb-row-wash {
+  inset: 1px -6px;
 }
 
 /* ---- Game layout --------------------------------------------------------
@@ -786,6 +837,14 @@ button:disabled {
     --lb-head-font: 9.5px;
     --lb-head-tracking: 0.2px;
     --lb-value-font: 14px;
+    /* No room for the +5 / -3 track here. The 304px budget above leaves 7px of
+       the modal's 311px, and every other column has already been squeezed to
+       reach it, so a 30px track would either overflow or truncate names again.
+       The track collapses and the delta cell clips, which leaves the row wash to
+       carry the change in this modal. The number itself is not lost on a phone:
+       ScoreStrip is the standings readout a phone player actually watches, and
+       it shows the value there. */
+    --lb-delta-col: 0px;
 
     --modal-pad: 16px;
   }

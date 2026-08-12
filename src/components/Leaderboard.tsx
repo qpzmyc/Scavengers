@@ -1,12 +1,16 @@
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import type { GameState, PlayerId } from '../engine';
 import { theme } from '../theme';
-import { DELTA_MS, useScoreCounts } from './useScoreCounts';
+import { DELTA_MS, useScoreCounts, useScoreMap } from './useScoreCounts';
 
 // Green for a gain, red for a loss. Both are also player colours here, so the
 // sign carries the meaning on its own and the colour only reinforces it.
 const GAIN = '#4ade80';
 const LOSS = '#f87171';
+// The same two colours behind the whole row. Kept faint: this sits under the
+// player's name and their score, and both have to stay readable through it.
+export const GAIN_WASH = 'rgba(74, 222, 128, 0.16)';
+export const LOSS_WASH = 'rgba(248, 113, 113, 0.16)';
 
 interface LeaderboardProps {
   state: GameState;
@@ -88,7 +92,13 @@ export function Leaderboard({ state, displayName, titledExternally }: Leaderboar
   const showScore = state.mode === 'deathmatch';
   const ids = state.turnOrder;
   const metricCount = 3 + (showScore ? 1 : 0);
-  const gridTemplateColumns = `minmax(var(--lb-name-col, 140px),1fr) repeat(${metricCount}, var(--lb-metric-col, 68px))`;
+  // The trailing track holds the +5 / -3. Reserved permanently rather than added
+  // when a score changes, so nothing shifts when one arrives. It collapses to 0
+  // at the phone breakpoint, where the modal has no width to spare — see
+  // --lb-delta-col in src/index.css.
+  const gridTemplateColumns =
+    `minmax(var(--lb-name-col, 140px),1fr) repeat(${metricCount}, var(--lb-metric-col, 68px))` +
+    (showScore ? ' var(--lb-delta-col, 30px)' : '');
 
   // Rank order, recomputed every render: active players first (removed/eliminated sink
   // to the bottom), then by score descending in deathmatch, with turn order as a stable
@@ -105,19 +115,7 @@ export function Leaderboard({ state, displayName, titledExternally }: Leaderboar
   });
   const rankOf = new Map<PlayerId, number>(ranked.map((id, i) => [id, i]));
 
-  // Memoised on the scores themselves so the hook's effect re-runs when a score
-  // moves, not on every unrelated re-render of the game.
-  const scoreKey = ids.map((id) => `${id}:${state.players[id].score}`).join(',');
-  const scores = useMemo(
-    () => new Map<PlayerId, number>(ids.map((id) => [id, state.players[id].score])),
-    // `scoreKey` is built from exactly the ids and scores this map is built from,
-    // so it changes whenever the map's contents would. Depending on `ids` and
-    // `state.players` instead would rebuild the map on every render of the game,
-    // which would restart the hook's effect and so restart every count.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [scoreKey],
-  );
-  const { displayed, deltas } = useScoreCounts(scores);
+  const { displayed, deltas } = useScoreCounts(useScoreMap(state));
 
   return (
     <div
@@ -169,6 +167,9 @@ export function Leaderboard({ state, displayName, titledExternally }: Leaderboar
         <HeadCell label="Deaths" />
         <HeadCell label="Streak" />
         {showScore && <HeadCell label="Score" />}
+        {/* Empty header over the delta track, so the header and the rows keep the
+            same column count and stay aligned. */}
+        {showScore && <div style={headCell} />}
       </div>
 
       {/* Positioned rows: each keyed by player id (so React keeps the DOM node) and
@@ -177,6 +178,7 @@ export function Leaderboard({ state, displayName, titledExternally }: Leaderboar
         {ids.map((id) => {
           const p = state.players[id];
           const rank = rankOf.get(id) ?? 0;
+          const delta = showScore ? deltas.get(id) : undefined;
           return (
             <div
               key={id}
@@ -196,6 +198,22 @@ export function Leaderboard({ state, displayName, titledExternally }: Leaderboar
                 opacity: p.eliminated ? 0.4 : 1,
               }}
             >
+              {/* The row fills with the player's gain or loss colour for as long as
+                  the number beside it is up. This is the part that carries across
+                  the screen: a player watching the board still registers that the
+                  standings moved. The row is already positioned for rank
+                  animation, so this sits inside it without a wrapper. */}
+              {delta && (
+                <span
+                  key={`wash-${delta.id}`}
+                  aria-hidden="true"
+                  className="lb-row-wash"
+                  style={{
+                    '--wash': delta.amount >= 0 ? GAIN_WASH : LOSS_WASH,
+                    '--score-delta-ms': `${DELTA_MS}ms`,
+                  } as React.CSSProperties}
+                />
+              )}
               <div style={{ ...cell, justifyContent: 'flex-start', gap: 8, minWidth: 0 }}>
                 <span style={{ width: 12, height: 12, borderRadius: '50%', background: p.color, display: 'inline-block', flexShrink: 0 }} />
                 <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -205,37 +223,31 @@ export function Leaderboard({ state, displayName, titledExternally }: Leaderboar
               <div style={cell}>{p.kills}</div>
               <div style={cell}>{p.deaths}</div>
               <div style={cell}>{Math.max(p.longestStreak, p.currentStreak)}</div>
+              {showScore && <div style={cell}>{displayed.get(id) ?? p.score}</div>}
               {showScore && (
-                // `position: relative` so the delta can ride above the number
-                // without taking layout space and nudging the column.
-                <div style={{ ...cell, position: 'relative' }}>
-                  {displayed.get(id) ?? p.score}
-                  {(() => {
-                    const d = deltas.get(id);
-                    if (!d) return null;
-                    return (
-                      <span
-                        // Keyed by the delta's id so a second kill restarts the
-                        // animation instead of leaving the first one to finish.
-                        key={d.id}
-                        aria-hidden="true"
-                        style={{
-                          position: 'absolute',
-                          left: '100%',
-                          marginLeft: 4,
-                          fontSize: 11,
-                          fontWeight: 700,
-                          fontVariantNumeric: 'tabular-nums',
-                          whiteSpace: 'nowrap',
-                          pointerEvents: 'none',
-                          color: d.amount >= 0 ? GAIN : LOSS,
-                          animation: `scoreDeltaRise ${DELTA_MS}ms var(--ease-exit) forwards`,
-                        }}
-                      >
-                        {d.amount >= 0 ? `+${d.amount}` : d.amount}
-                      </span>
-                    );
-                  })()}
+                // The delta's own track. `overflow: hidden` is what makes the
+                // phone breakpoint's 0-width track safe: the number is clipped
+                // there rather than escaping the card the way it used to.
+                <div style={{ ...cell, justifyContent: 'flex-start', overflow: 'hidden', paddingLeft: 4 }}>
+                  {delta && (
+                    <span
+                      // Keyed by the delta's id so a second kill restarts the
+                      // animation instead of leaving the first one to finish.
+                      key={delta.id}
+                      aria-hidden="true"
+                      style={{
+                        fontSize: 11,
+                        fontWeight: 700,
+                        fontVariantNumeric: 'tabular-nums',
+                        whiteSpace: 'nowrap',
+                        pointerEvents: 'none',
+                        color: delta.amount >= 0 ? GAIN : LOSS,
+                        animation: `scoreDeltaRise ${DELTA_MS}ms var(--ease-exit) forwards`,
+                      }}
+                    >
+                      {delta.amount >= 0 ? `+${delta.amount}` : delta.amount}
+                    </span>
+                  )}
                 </div>
               )}
             </div>
