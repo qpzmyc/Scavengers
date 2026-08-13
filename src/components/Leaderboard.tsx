@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { GameState, PlayerId } from '../engine';
 import { theme } from '../theme';
+import { Modal } from './Modal';
 import { DELTA_MS, useScoreCounts, useScoreMap } from './useScoreCounts';
 
 // Green for a gain, red for a loss. Both are also player colours here, so the
@@ -12,15 +13,60 @@ const LOSS = '#f87171';
 export const GAIN_WASH = 'rgba(74, 222, 128, 0.16)';
 export const LOSS_WASH = 'rgba(248, 113, 113, 0.16)';
 
+/**
+ * What the "?" beside the title explains. Shared rather than written twice: the
+ * desktop leaderboard opens it in its own popup, and on a phone the standings
+ * popup swaps its contents for it, since a popup over a popup would dim the
+ * background twice.
+ *
+ * The amounts take the same green and red as the +5 / -3 that animate on the
+ * rows, so the legend and the thing it explains read as the same system.
+ */
+export function ScoringNote() {
+  const rules: [string, string, string][] = [
+    ['+5', 'a kill', GAIN],
+    ['−3', 'a death', LOSS],
+    ['+1', 'a streak', GAIN],
+  ];
+  return (
+    <div style={{ display: 'grid', gap: 10 }}>
+      {rules.map(([amount, what, color]) => (
+        <div key={what} style={{ display: 'flex', alignItems: 'baseline', gap: 12 }}>
+          <span
+            style={{
+              minWidth: 34,
+              textAlign: 'right',
+              fontSize: 16,
+              fontWeight: 700,
+              fontVariantNumeric: 'tabular-nums',
+              color,
+            }}
+          >
+            {amount}
+          </span>
+          <span style={{ fontSize: 14, color: theme.text }}>{what}</span>
+        </div>
+      ))}
+      <div style={{ fontSize: 12, color: theme.textMuted, marginTop: 2 }}>
+        A streak is the most consecutive turns you have stayed alive.
+      </div>
+    </div>
+  );
+}
+
 interface LeaderboardProps {
   state: GameState;
   // Overrides the color-based label per player (e.g. a custom online display name).
   // Falls back to color.toUpperCase() when omitted (hotseat's call sites omit it).
   displayName?: (id: PlayerId) => string;
   // Set when a Modal title already names this table, so the word doesn't appear
-  // twice a few pixels apart. The rest of the header row (the "?" toggle and the
+  // twice a few pixels apart. The rest of the header row (the "?" button and the
   // target score) stays either way — only the heading text goes.
   titledExternally?: boolean;
+  // Hands the "?" to a caller that is already showing a popup. Without it this
+  // component opens its own; with it, the caller swaps whatever it is showing.
+  // That is the phone case, where stacking a second popup would dim twice.
+  onShowScoring?: () => void;
 }
 
 // Row height so rows can be absolutely positioned and slide (transform) between
@@ -69,7 +115,7 @@ const cell: React.CSSProperties = {
 // two columns with no delta ("Player", "Score") had to bottom-align into the delta
 // row, so whichever way they were aligned, one of them read as belonging to the
 // wrong row. The deltas now live behind the "?" beside the title, where they cost
-// a tap and stop distorting the header. See ScoringNote below.
+// a tap and stop distorting the header. See ScoringNote above.
 const headCell: React.CSSProperties = {
   display: 'flex',
   alignItems: 'center',
@@ -87,7 +133,7 @@ function HeadCell({ label }: { label: string }) {
   return <div style={headCell}>{label}</div>;
 }
 
-export function Leaderboard({ state, displayName, titledExternally }: LeaderboardProps) {
+export function Leaderboard({ state, displayName, titledExternally, onShowScoring }: LeaderboardProps) {
   const [showScoring, setShowScoring] = useState(false);
   const showScore = state.mode === 'deathmatch';
   const ids = state.turnOrder;
@@ -132,9 +178,9 @@ export function Leaderboard({ state, displayName, titledExternally }: Leaderboar
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           {!titledExternally && <h3 style={{ fontSize: 15, margin: 0 }}>Leaderboard</h3>}
           <button
-            onClick={() => setShowScoring((v) => !v)}
-            aria-expanded={showScoring}
-            aria-label={showScoring ? 'Hide how scoring works' : 'Show how scoring works'}
+            onClick={() => (onShowScoring ? onShowScoring() : setShowScoring(true))}
+            aria-haspopup="dialog"
+            aria-label="How scoring works"
             style={{
               // 24px is the WCAG 2.2 pointer-target floor, and this control has
               // clear space around it so the floor is the right size to hit.
@@ -255,18 +301,19 @@ export function Leaderboard({ state, displayName, titledExternally }: Leaderboar
         })}
       </div>
 
-      {/* Both explanations sit together at the foot of the card. The streak line is
-          always on because "Streak" is the one column whose name does not say what
-          it counts; the scoring line is behind the "?" because it is read once and
-          then known. */}
+      {/* Stays at the foot rather than moving into the "?" popup: "Streak" is the
+          one column whose name does not say what it counts, so it has to be
+          readable without opening anything. The scoring amounts are behind the
+          "?" because they are read once and then known. */}
       <div style={{ marginTop: 8, fontSize: 11, color: theme.textMuted }}>
-        {showScoring && (
-          <div style={{ marginBottom: 4, color: theme.text }}>
-            +5 a kill, &minus;3 a death, +1 a streak
-          </div>
-        )}
         Streak = most consecutive turns alive
       </div>
+
+      {showScoring && (
+        <Modal title="How scoring works" onClose={() => setShowScoring(false)}>
+          <ScoringNote />
+        </Modal>
+      )}
     </div>
   );
 }

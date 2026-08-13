@@ -24,7 +24,7 @@ import {
 } from '../engine';
 import { Board, type Highlight, type HighlightKind, type RedTint, type DeathAnim } from '../components/Board';
 import { ResourceBars, type ResourcePreview } from '../components/ResourceBars';
-import { Leaderboard } from '../components/Leaderboard';
+import { Leaderboard, ScoringNote } from '../components/Leaderboard';
 import { Lives } from '../components/Lives';
 import { ControlPanel, type Flow, type AttackType, type Capabilities } from '../components/ControlPanel';
 import { GameLayout } from '../components/GameLayout';
@@ -99,7 +99,7 @@ export function OnlineGame({
   const [sending, setSending] = useState(false);
   const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
   // Phone breakpoint only: which side panel (normally shown inline) is open as a modal.
-  const [phonePanel, setPhonePanel] = useState<'standings' | 'kills' | null>(null);
+  const [phonePanel, setPhonePanel] = useState<'standings' | 'scoring' | 'kills' | null>(null);
   const { ref: boardRef, cellSize, columnWidth } = useBoardColumn();
   // The controls column lives in its own grid track (see GameLayout), so it needs its
   // own width measurement — columnWidth above tracks the board, which ResourceBars
@@ -1066,7 +1066,16 @@ export function OnlineGame({
         <Modal title={standingsLabel(state.mode)} onClose={() => setPhonePanel(null)}>
           {state.mode === 'lastStanding'
             ? <Lives state={state} displayName={nameFor} titledExternally />
-            : <Leaderboard state={state} displayName={nameFor} titledExternally />}
+            : <Leaderboard state={state} displayName={nameFor} titledExternally onShowScoring={() => setPhonePanel('scoring')} />}
+        </Modal>
+      )}
+      {/* Same swap as the hotseat screen: one popup at a time on a phone. */}
+      {phonePanel === 'scoring' && (
+        <Modal title="How scoring works" onClose={() => setPhonePanel(null)}>
+          <ScoringNote />
+          <button onClick={() => setPhonePanel('standings')} style={{ marginTop: 18 }}>
+            Back to {standingsLabel(state.mode)}
+          </button>
         </Modal>
       )}
       {phonePanel === 'kills' && (
