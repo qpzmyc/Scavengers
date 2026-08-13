@@ -30,12 +30,12 @@ export interface ScoreDelta {
   readonly id: number;
 }
 
-// How long the delta and the row wash stay up: 150ms in, 1500ms held, 500ms out.
-// The old 900ms held full opacity for only about a third of a second, which was
-// not long enough to notice, let alone read. Keep in step with the
-// `scoreDeltaRise` and `scoreRowWash` keyframe durations in src/index.css, which
-// read it back through the `--score-delta-ms` custom property.
-export const DELTA_MS = 2150;
+// How long the delta and the row wash stay up: 120ms in, 1200ms held, 380ms out.
+// The original 900ms held full opacity for only about a third of a second, which
+// was not long enough to notice, let alone read; 2150ms fixed that but lingered.
+// Keep in step with the `scoreDeltaRise` and `scoreRowWash` keyframe percentages
+// in src/index.css, which read this back through `--score-delta-ms`.
+export const DELTA_MS = 1700;
 
 /**
  * Drives every player's score number toward its real value and reports what

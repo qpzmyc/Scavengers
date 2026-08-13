@@ -926,6 +926,13 @@ function App() {
     setDeathAnims([]);
     setReplayActorId(rest.find((f) => f.actorId)?.actorId ?? baseline.actorId ?? null);
     setPhase('replaying');
+    // Standings follow the replay one frame behind. Each frame's `display` already
+    // carries the score its own action produced, so showing it as that frame STARTS
+    // would move the number while the kill is still lighting up — the thing the
+    // actor's own view was changed to avoid. Lagging by one lands each change as
+    // the frame that earned it finishes, so a chain of kills ticks the score once
+    // per kill, in step with what the viewer is being shown.
+    let previous = baseline;
     schedule(REPLAY_START_MS, () => {
       playFrames(
         rest,
@@ -948,6 +955,8 @@ function App() {
         },
         (f) => {
           if (f.actorId) setReplayActorId(f.actorId);
+          setStandings(previous.display);
+          previous = f;
         }
       );
     });
