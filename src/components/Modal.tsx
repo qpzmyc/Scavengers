@@ -14,10 +14,22 @@ const FOCUSABLE =
 
 export function Modal({
   title,
+  hideTitle,
+  instantClose,
   onClose,
   children,
 }: {
   title: string;
+  // Skips drawing the heading while keeping `title` as the dialog's accessible
+  // name. For content that already carries its own heading in the place it
+  // belongs: the standings popup shows the whole leaderboard card, heading
+  // included, so a second centred copy of the word above it is one too many.
+  hideTitle?: boolean;
+  // Makes a dismiss immediate, with no exit animation. For a popup whose "×"
+  // hands control back to another view of the same popup rather than closing it:
+  // that is a step inside the popup, so playing the goodbye and then staying on
+  // screen would be a lie, and it would leave this panel faded out.
+  instantClose?: boolean;
   onClose: () => void;
   children: ReactNode;
 }) {
@@ -47,9 +59,13 @@ export function Modal({
     // onClose. Harmless for a popup, but not for ConfirmDialog, whose onClose
     // runs a real action.
     if (exitTimer.current !== null) return;
+    if (instantClose) {
+      onClose();
+      return;
+    }
     setClosing(true);
     exitTimer.current = window.setTimeout(onClose, EXIT_MS);
-  }, [onClose]);
+  }, [onClose, instantClose]);
 
   // Move focus into the panel on open and hand it back to the opener on close,
   // so keyboard focus never ends up stranded on an element that is no longer on
@@ -137,6 +153,18 @@ export function Modal({
           borderRadius: theme.radius,
           boxShadow: theme.shadow,
           padding: 'var(--modal-pad, 32px)',
+          // The close button is absolutely positioned at top 12 and is 32 tall,
+          // so it ends at 44. With a heading above it that never mattered; with
+          // `hideTitle` the content's own first line arrives at the panel's top
+          // padding instead, and on a phone (--modal-pad 16) the button landed
+          // on top of it, hiding the last character of "Target score: 30".
+          //
+          // Both branches name a value on purpose. React writes these in key
+          // order, so `paddingTop: undefined` came out as `style.paddingTop = ''`
+          // AFTER the shorthand above had set it, which reset the top padding of
+          // every titled popup in the game to zero and left the heading against
+          // the panel's edge.
+          paddingTop: hideTitle ? 'max(var(--modal-pad, 32px), 52px)' : 'var(--modal-pad, 32px)',
           minWidth: 'min(360px, calc(100vw - 32px))',
           maxWidth: 'calc(100vw - 32px)',
           display: 'flex',
@@ -175,7 +203,7 @@ export function Modal({
         >
           ×
         </button>
-        <h2 style={{ fontSize: 22, margin: 0, color: theme.heading }}>{title}</h2>
+        {!hideTitle && <h2 style={{ fontSize: 22, margin: 0, color: theme.heading }}>{title}</h2>}
         {children}
       </div>
     </div>

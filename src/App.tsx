@@ -1428,22 +1428,32 @@ function App() {
         }
         killsFeed={killsList}
       />
-      {phonePanel === 'standings' && (
-        <Modal title={standingsLabel(state.mode)} onClose={() => setPhonePanel(null)}>
-          {state.mode === 'lastStanding'
-            ? <Lives state={standings} titledExternally />
-            : <Leaderboard state={standings} titledExternally onShowScoring={() => setPhonePanel('scoring')} />}
-        </Modal>
-      )}
-      {/* The "?" swaps this popup's contents rather than opening a second one over
-          it, which would dim the background twice. "Back" returns to the table
-          instead of closing, so the tap that opened the standings is not spent. */}
-      {phonePanel === 'scoring' && (
-        <Modal title="How scoring works" onClose={() => setPhonePanel(null)}>
-          <ScoringNote />
-          <button onClick={() => setPhonePanel('standings')} style={{ marginTop: 18 }}>
-            Back to {standingsLabel(state.mode)}
-          </button>
+      {/* Standings and the scoring legend are ONE popup with two faces, not two
+          popups. Written as two `&&` blocks they were two Modals, so tapping the
+          "?" unmounted one and mounted the other: the scrim dropped to
+          transparent and faded back in while the panel replayed its 34px rise,
+          which reads as the screen flickering mid-swap. One element, whose
+          contents change, keeps the same scrim and panel throughout.
+
+          Dismissing the legend goes back to the table rather than closing
+          outright, so the tap that opened the standings is not spent, and the
+          "×" carries that on its own instead of a second button repeating it.
+          `instantClose` is what stops that step playing the panel's goodbye
+          animation and then staying on screen. */}
+      {(phonePanel === 'standings' || phonePanel === 'scoring') && (
+        <Modal
+          title={phonePanel === 'scoring' ? 'How scoring works' : standingsLabel(state.mode)}
+          hideTitle={phonePanel === 'standings'}
+          instantClose={phonePanel === 'scoring'}
+          onClose={() => setPhonePanel(phonePanel === 'scoring' ? 'standings' : null)}
+        >
+          {phonePanel === 'scoring' ? (
+            <ScoringNote />
+          ) : state.mode === 'lastStanding' ? (
+            <Lives state={standings} inModal />
+          ) : (
+            <Leaderboard state={standings} inModal onShowScoring={() => setPhonePanel('scoring')} />
+          )}
         </Modal>
       )}
       {phonePanel === 'kills' && (

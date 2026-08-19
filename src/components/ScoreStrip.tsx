@@ -1,12 +1,9 @@
 import type { CSSProperties, ReactNode } from 'react';
 import type { GameState } from '../engine';
 import { theme } from '../theme';
-import { GAIN_WASH, LOSS_WASH } from './Leaderboard';
+import { formatDelta, GAIN, GAIN_WASH, LOSS, LOSS_WASH } from './scoreDelta';
 import { standingsLabel } from './standingsLabel';
 import { DELTA_MS, useScoreCounts, useScoreMap } from './useScoreCounts';
-
-const GAIN = '#4ade80';
-const LOSS = '#f87171';
 
 interface ScoreStripProps {
   state: GameState;
@@ -105,7 +102,7 @@ export function ScoreStrip({ state, onOpenStandings, onOpenKills, lastKill }: Sc
                             animation: `scoreDeltaRise ${DELTA_MS}ms var(--ease-exit) forwards`,
                           }}
                         >
-                          {delta.amount >= 0 ? `+${delta.amount}` : delta.amount}
+                          {formatDelta(delta.amount)}
                         </span>
                       )}
                     </span>

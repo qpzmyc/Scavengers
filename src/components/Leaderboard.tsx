@@ -2,16 +2,9 @@ import { useState } from 'react';
 import type { GameState, PlayerId } from '../engine';
 import { theme } from '../theme';
 import { Modal } from './Modal';
+import { formatDelta, GAIN, GAIN_WASH, LOSS, LOSS_WASH } from './scoreDelta';
 import { DELTA_MS, useScoreCounts, useScoreMap } from './useScoreCounts';
 
-// Green for a gain, red for a loss. Both are also player colours here, so the
-// sign carries the meaning on its own and the colour only reinforces it.
-const GAIN = '#4ade80';
-const LOSS = '#f87171';
-// The same two colours behind the whole row. Kept faint: this sits under the
-// player's name and their score, and both have to stay readable through it.
-export const GAIN_WASH = 'rgba(74, 222, 128, 0.16)';
-export const LOSS_WASH = 'rgba(248, 113, 113, 0.16)';
 
 /**
  * What the "?" beside the title explains. Shared rather than written twice: the
@@ -24,9 +17,9 @@ export const LOSS_WASH = 'rgba(248, 113, 113, 0.16)';
  */
 export function ScoringNote() {
   const rules: [string, string, string][] = [
-    ['+5', 'a kill', GAIN],
-    ['−3', 'a death', LOSS],
-    ['+1', 'a streak', GAIN],
+    ['+5', 'per kill', GAIN],
+    ['−3', 'per death', LOSS],
+    ['+1', 'per streak', GAIN],
   ];
   return (
     <div style={{ display: 'grid', gap: 10 }}>
@@ -47,9 +40,6 @@ export function ScoringNote() {
           <span style={{ fontSize: 14, color: theme.text }}>{what}</span>
         </div>
       ))}
-      <div style={{ fontSize: 12, color: theme.textMuted, marginTop: 2 }}>
-        A streak is the most consecutive turns you have stayed alive.
-      </div>
     </div>
   );
 }
@@ -59,10 +49,11 @@ interface LeaderboardProps {
   // Overrides the color-based label per player (e.g. a custom online display name).
   // Falls back to color.toUpperCase() when omitted (hotseat's call sites omit it).
   displayName?: (id: PlayerId) => string;
-  // Set when a Modal title already names this table, so the word doesn't appear
-  // twice a few pixels apart. The rest of the header row (the "?" button and the
-  // target score) stays either way — only the heading text goes.
-  titledExternally?: boolean;
+  // Set when this card is drawn inside a Modal, which already supplies the
+  // surface, border, radius, shadow and padding. Only the frame goes: the card
+  // keeps its own heading and header row, so the popup reads as the same table
+  // a desktop player sees rather than a rearranged version of it.
+  inModal?: boolean;
   // Hands the "?" to a caller that is already showing a popup. Without it this
   // component opens its own; with it, the caller swaps whatever it is showing.
   // That is the phone case, where stacking a second popup would dim twice.
@@ -133,7 +124,7 @@ function HeadCell({ label }: { label: string }) {
   return <div style={headCell}>{label}</div>;
 }
 
-export function Leaderboard({ state, displayName, titledExternally, onShowScoring }: LeaderboardProps) {
+export function Leaderboard({ state, displayName, inModal, onShowScoring }: LeaderboardProps) {
   const [showScoring, setShowScoring] = useState(false);
   const showScore = state.mode === 'deathmatch';
   const ids = state.turnOrder;
@@ -164,19 +155,26 @@ export function Leaderboard({ state, displayName, titledExternally, onShowScorin
   const { displayed, deltas } = useScoreCounts(useScoreMap(state));
 
   return (
+    // A Modal that already titles and frames this table supplies the surface,
+    // border, radius, shadow and padding itself, so repeating all five here put
+    // an identical box 16px inside an identical box.
     <div
-      style={{
-        background: theme.surface,
-        border: `1px solid ${theme.border}`,
-        borderRadius: theme.radius,
-        boxShadow: theme.shadow,
-        padding: 16,
-        minWidth: 240,
-      }}
+      style={
+        inModal
+          ? { minWidth: 240 }
+          : {
+              background: theme.surface,
+              border: `1px solid ${theme.border}`,
+              borderRadius: theme.radius,
+              boxShadow: theme.shadow,
+              padding: 16,
+              minWidth: 240,
+            }
+      }
     >
       <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 10 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          {!titledExternally && <h3 style={{ fontSize: 15, margin: 0 }}>Leaderboard</h3>}
+          <h3 style={{ fontSize: 15, margin: 0 }}>Leaderboard</h3>
           <button
             onClick={() => (onShowScoring ? onShowScoring() : setShowScoring(true))}
             aria-haspopup="dialog"
@@ -187,9 +185,14 @@ export function Leaderboard({ state, displayName, titledExternally, onShowScorin
               width: 24,
               height: 24,
               padding: 0,
+              flexShrink: 0,
               borderRadius: '50%',
               background: showScoring ? theme.accentSoft : 'transparent',
-              border: `1px solid ${theme.border}`,
+              // theme.border is 1.32:1 against this surface, well under the 3:1
+              // WCAG floor for a control's own boundary, and this ring is the
+              // only thing marking the "?" as pressable. textMuted is 5.16:1 and
+              // is already the glyph's colour, so the two read as one control.
+              border: `1px solid ${theme.textMuted}`,
               color: showScoring ? theme.accentText : theme.textMuted,
               fontSize: 12,
               fontWeight: 700,
@@ -202,7 +205,7 @@ export function Leaderboard({ state, displayName, titledExternally, onShowScorin
         </div>
         {showScore && (
           <span style={{ fontSize: 12, fontWeight: 700, color: theme.accentText }}>
-            Target: {state.targetScore}
+            Target score: {state.targetScore}
           </span>
         )}
       </div>
@@ -274,7 +277,14 @@ export function Leaderboard({ state, displayName, titledExternally, onShowScorin
                 // The delta's own track. `overflow: hidden` is what makes the
                 // phone breakpoint's 0-width track safe: the number is clipped
                 // there rather than escaping the card the way it used to.
-                <div style={{ ...cell, justifyContent: 'flex-start', overflow: 'hidden', paddingLeft: 4 }}>
+                //
+                // The padding has to be zero for that to hold. `overflow` clips
+                // at the PADDING box, not the content box, so the 4px+3px this
+                // cell used to carry survived the track collapsing to 0 and let
+                // a 3px sliver of the "+5" paint at the row's right edge on a
+                // phone. The gap to the score now comes from the span's own
+                // margin, which collapses with the track.
+                <div style={{ ...cell, justifyContent: 'flex-start', overflow: 'hidden', padding: 0 }}>
                   {delta && (
                     <span
                       // Keyed by the delta's id so a second kill restarts the
@@ -282,6 +292,7 @@ export function Leaderboard({ state, displayName, titledExternally, onShowScorin
                       key={delta.id}
                       aria-hidden="true"
                       style={{
+                        marginLeft: 4,
                         fontSize: 11,
                         fontWeight: 700,
                         fontVariantNumeric: 'tabular-nums',
@@ -291,7 +302,7 @@ export function Leaderboard({ state, displayName, titledExternally, onShowScorin
                         animation: `scoreDeltaRise ${DELTA_MS}ms var(--ease-exit) forwards`,
                       }}
                     >
-                      {delta.amount >= 0 ? `+${delta.amount}` : delta.amount}
+                      {formatDelta(delta.amount)}
                     </span>
                   )}
                 </div>

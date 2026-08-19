@@ -955,10 +955,16 @@ button:disabled {
   }
 
   /* Built from the very tokens the Leaderboard's grid uses (name column, four
-     metric columns, and the card's own 16px padding either side) so it tracks
-     --ui-unit automatically instead of being a number that silently goes stale. */
+     metric columns, the delta track, and the card's own 16px padding and 1px
+     border either side) so it tracks --ui-unit automatically instead of being a
+     number that silently goes stale. The delta track and the border were both
+     missing, which left this 32px under the card it is supposed to describe:
+     444px reserved against 476px measured on screen. */
   .game-layout[data-standings='leaderboard'] {
-    --stand-reserve: max(240px, calc(var(--lb-name-col) + 4 * var(--lb-metric-col) + 32px));
+    --stand-reserve: max(
+      240px,
+      calc(var(--lb-name-col) + 4 * var(--lb-metric-col) + var(--lb-delta-col) + 34px)
+    );
   }
 
   /* The standings column has to keep its intrinsic width, or giving the board a

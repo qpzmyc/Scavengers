@@ -6,26 +6,34 @@ interface LivesProps {
   // Overrides the color-based label per player (e.g. a custom online display name).
   // Falls back to color.toUpperCase() when omitted (hotseat's call sites omit it).
   displayName?: (id: PlayerId) => string;
-  // Set when a Modal title already names this table, so the word doesn't appear
-  // twice a few pixels apart.
-  titledExternally?: boolean;
+  // Set when this card is drawn inside a Modal, which already supplies the
+  // surface, border, radius, shadow and padding. Only the frame goes; the card
+  // keeps its own heading, in step with the Leaderboard.
+  inModal?: boolean;
 }
 
-export function Lives({ state, displayName, titledExternally }: LivesProps) {
+export function Lives({ state, displayName, inModal }: LivesProps) {
   const players = state.turnOrder.map((id) => state.players[id]);
 
   return (
+    // Same reason as the Leaderboard's: a Modal already supplies all five of
+    // these, so keeping them drew an identical box 16px inside an identical box.
+    // Changed in step with that card so the two standings popups stay one thing.
     <div
-      style={{
-        background: theme.surface,
-        border: `1px solid ${theme.border}`,
-        borderRadius: theme.radius,
-        boxShadow: theme.shadow,
-        padding: 16,
-        minWidth: 240,
-      }}
+      style={
+        inModal
+          ? { minWidth: 240 }
+          : {
+              background: theme.surface,
+              border: `1px solid ${theme.border}`,
+              borderRadius: theme.radius,
+              boxShadow: theme.shadow,
+              padding: 16,
+              minWidth: 240,
+            }
+      }
     >
-      {!titledExternally && <h3 style={{ marginBottom: 10, fontSize: 15 }}>Lives</h3>}
+      <h3 style={{ marginBottom: 10, fontSize: 15 }}>Lives</h3>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
         {players.map((p) => {
           const remaining = Math.max(0, state.deathCap - p.deaths);

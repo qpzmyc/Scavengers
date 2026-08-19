@@ -1062,20 +1062,23 @@ export function OnlineGame({
         }
         killsFeed={killsList}
       />
-      {phonePanel === 'standings' && (
-        <Modal title={standingsLabel(state.mode)} onClose={() => setPhonePanel(null)}>
-          {state.mode === 'lastStanding'
-            ? <Lives state={state} displayName={nameFor} titledExternally />
-            : <Leaderboard state={state} displayName={nameFor} titledExternally onShowScoring={() => setPhonePanel('scoring')} />}
-        </Modal>
-      )}
-      {/* Same swap as the hotseat screen: one popup at a time on a phone. */}
-      {phonePanel === 'scoring' && (
-        <Modal title="How scoring works" onClose={() => setPhonePanel(null)}>
-          <ScoringNote />
-          <button onClick={() => setPhonePanel('standings')} style={{ marginTop: 18 }}>
-            Back to {standingsLabel(state.mode)}
-          </button>
+      {/* Same single popup with two faces as the hotseat screen, for the same
+          reason: as two Modals the "?" remounted the whole thing and the scrim
+          flickered. See the comment on App.tsx's copy. */}
+      {(phonePanel === 'standings' || phonePanel === 'scoring') && (
+        <Modal
+          title={phonePanel === 'scoring' ? 'How scoring works' : standingsLabel(state.mode)}
+          hideTitle={phonePanel === 'standings'}
+          instantClose={phonePanel === 'scoring'}
+          onClose={() => setPhonePanel(phonePanel === 'scoring' ? 'standings' : null)}
+        >
+          {phonePanel === 'scoring' ? (
+            <ScoringNote />
+          ) : state.mode === 'lastStanding' ? (
+            <Lives state={state} displayName={nameFor} inModal />
+          ) : (
+            <Leaderboard state={state} displayName={nameFor} inModal onShowScoring={() => setPhonePanel('scoring')} />
+          )}
         </Modal>
       )}
       {phonePanel === 'kills' && (
